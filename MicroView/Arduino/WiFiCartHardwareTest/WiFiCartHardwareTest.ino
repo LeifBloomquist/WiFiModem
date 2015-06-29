@@ -1,5 +1,5 @@
 /*
-     Commodore 64 - MicroVire - Wi-fi Cart
+     Commodore 64 - MicroView - Wi-fi Cart
      Hardware Test
      Leif Bloomquist
 */
@@ -31,8 +31,6 @@ void setup()
   uView.setFontType(0);
    
   C64Serial.begin(C64_BAUD);
-  
-
 }
   
 void loop()
