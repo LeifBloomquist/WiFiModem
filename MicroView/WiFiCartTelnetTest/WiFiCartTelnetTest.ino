@@ -64,7 +64,7 @@ void setup()
   }
   else
   {
-    display2("Wi-Fi \nFailed!");
+    display2("Wi-Fi Failed!");
   }
 }
   
@@ -73,7 +73,8 @@ void loop()
    C64Serial.println();
    C64Serial.println("Commodore 64 Wi-Fi Modem");
    C64Serial.println("Telnet Test");
-   C64Serial.print("host: ");
+   ShowStats();   
+   C64Serial.print("\nhost: ");
    C64Serial.setTimeout(1000);
    
    String readString = GetInput();
@@ -137,6 +138,25 @@ String GetInput()
 
 // ----------------------------------------------------------
 
+void ShowStats()
+{
+  char mac[20];
+  char ip[20];
+  char ssid[20];
+  
+  wifly.getMAC(mac,20);
+  wifly.getIP(ip,20);  
+  wifly.getSSID(ssid,20);  
+  
+  C64Serial.print("\nMAC Address: ");   C64Serial.println(mac); 
+  C64Serial.print("IP Address:  ");   C64Serial.println(ip); 
+  C64Serial.print("Wi-Fi SSID:  ");   C64Serial.println(ssid); 
+}
+  
+
+
+// ----------------------------------------------------------
+
 void Telnet(String host)
 {
    sprintf(temp, "Connecting to %s", host.c_str() );   
@@ -162,9 +182,9 @@ void Telnet(String host)
 
 void TerminalMode()
 { 
-   C64Serial.println("\nDetermining Connection Type\n"); 
+   C64Serial.println("Determining Connection Type\n"); 
    CheckTelnet();
-   C64Serial.println("\nEntering Terminal Mode\n");
+   C64Serial.println("*** Entering Terminal Mode ***\n");
   
    while (wifly.available() != -1) // -1 means closed
    {
@@ -189,8 +209,6 @@ void TerminalMode()
     display2("Connection closed");
 }
 
-
-
 void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host
 {
   int inpint, verbint, optint;                         //    telnet parameters as integers
@@ -206,7 +224,7 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
   C64Serial.println("Telnet Connection Detected");
   
   // IAC handling
-//  SendTelnetParameters();    // Start off with negotiating
+  SendTelnetParameters();    // Start off with negotiating
   
   while (true)
   {
@@ -214,9 +232,6 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
      
     if (inpint != IAC)  
     {
-      C64Serial.print("Received inpint=");
-      C64Serial.println(inpint);
-      C64Serial.println("End of IAC Negotiation");
       return;   // Let Terminal mode handle character
     }
     
