@@ -37,6 +37,8 @@ WiFly wifly;
 // Telnet Stuff
 #define IAC 255
 
+String lastHost = "";
+
 // ----------------------------------------------------------
 
 char temp[100];
@@ -74,30 +76,21 @@ void loop()
    C64Serial.print("host: ");
    C64Serial.setTimeout(1000);
    
-   String readString = "";
-   bool changed=false;   
-   long c64_chars=0;
-   
-   while (true)
+   String readString = GetInput();
+   readString.trim();
+         
+   if (readString.length() > 0)
    {
-     while (C64Serial.available() > 0)
-     {
-       c64_chars++;
-       char c = C64Serial.read();
-       C64Serial.print(c); // Echo
-       
-       if ((int)c == 13)
-       {
-         Telnet(readString);
-         return;
-       }
-       else
-       {      
-         readString += c;
-       } 
-     }
-   }   
+     lastHost = readString;
+     Telnet(readString);
+   }
+   else
+   {
+      Telnet(lastHost);
+   }
 }
+
+// ----------------------------------------------------------
 
 void display(String message)
 {
@@ -107,15 +100,46 @@ void display(String message)
    uView.display();
 }
 
+
 void display2(String message)
 {
    display(message);
    C64Serial.println(message);
 }
 
+// ----------------------------------------------------------
+
+String GetInput() 
+{
+  char in_char[100];
+  int max_length=sizeof(in_char);
+  
+  int i=0; // Input buffer pointer
+  char key;
+  
+  while(true) 
+  {
+      key=ReadByte(C64Serial); // Read in one character
+      in_char[i]=key;      
+      C64Serial.write(key); // Echo key press back to the user.
+      
+      if ((key=='\b')&&(i>0)) i-=2; // Handles back space.
+      
+      if (((int)key==13)||(i==max_length-1)) 
+      { // The \n represents enter key.
+        in_char[i]=0; // Terminate the string with 0.
+        return String(in_char);
+      }
+      i++;
+      if (i<0) i=0;
+  }
+}
+
+// ----------------------------------------------------------
+
 void Telnet(String host)
 {
-   sprintf(temp, "\n\nOpening Telnet connection to %s", host.c_str() );   
+   sprintf(temp, "Connecting to %s", host.c_str() );   
    display2(temp);
    
    wifly.setIpProtocol(WIFLY_PROTOCOL_TCP);
@@ -124,7 +148,8 @@ void Telnet(String host)
    
    if (ok)
    {
-      display2("Connected");
+      sprintf(temp, "Connected to %s", host.c_str() );   
+      display2(temp); 
    }
    else
    {
@@ -132,10 +157,7 @@ void Telnet(String host)
      return;
    }
    
-   TerminalMode();   
-  
-    
- 
+   TerminalMode(); 
 }
 
 void TerminalMode()
@@ -155,6 +177,12 @@ void TerminalMode()
      {
         wifly.write( C64Serial.read() );
      }
+     
+     // Alternate check
+     if (!wifly.isConnected())
+     {
+        break;
+     }
    }
    
     wifly.close();
@@ -168,7 +196,7 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
   int inpint, verbint, optint;                         //    telnet parameters as integers
   
   // Wait for first character
-  inpint = PeekByte();  
+  inpint = PeekByte(wifly);  
   if (inpint != IAC)  
   {
     C64Serial.println("Raw TCP Connection Detected");
@@ -182,7 +210,7 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
   
   while (true)
   {
-    inpint = PeekByte();       //      peek at next character
+    inpint = PeekByte(wifly);       //      peek at next character
      
     if (inpint != IAC)  
     {
@@ -192,12 +220,8 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
       return;   // Let Terminal mode handle character
     }
     
-    inpint = ReadByte();    // Eat IAC character    
-    verbint = ReadByte();   // receive negotiation verb character
-        
-    C64Serial.print("Received verbint=");
-    C64Serial.println(verbint);
-        
+    inpint = ReadByte(wifly);    // Eat IAC character    
+    verbint = ReadByte(wifly);   // receive negotiation verb character        
     if (verbint == - 1) continue;                //          if negotiation verb character is nothing break the routine  (should never happen)
         
     switch (verbint) {                             //          evaluate negotiation verb character
@@ -208,14 +232,9 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
         case 252:                                    //          if negotiation verb character is 252 (wont) or
         case 253:                                    //          if negotiation verb character is 253 (do) or
         case 254:                                    //          if negotiation verb character is 254 (dont)
-          optint = ReadByte();                   //            receive negotiation option character
-          
-           C64Serial.print("Received optint=");
-           C64Serial.println(optint);
-          
-          if (optint == -1) continue;                   //            if negotiation option character is nothing break the routine  
-          
-          
+          optint = ReadByte(wifly);                  //            receive negotiation option character         
+          if (optint == -1) continue;                   //            if negotiation option character is nothing break the routine  (should never happen) 
+                  
           switch (optint) {            
             
             case 3:                                   // if negotiation option character is 3 (suppress-go-ahead)
@@ -255,14 +274,15 @@ void SendTelnetParameters()
   wifly.write(1);                             // echo
 }
 
-int ReadByte()
+int ReadByte(Stream& in)
 {
-    while (wifly.available() == 0) {}   
-    return wifly.read();
+    while (in.available() == 0) {}   
+    return in.read();
 }
 
-int PeekByte()
+int PeekByte(Stream& in)
 {
-    while (wifly.available() == 0) {}   
-    return wifly.peek();
+    while (in.available() == 0) {}   
+    return in.peek();
 }
+
