@@ -34,6 +34,9 @@ SoftwareSerial C64Serial(RxD, TxD);
 HardwareSerial& WifiSerial = Serial;  
 WiFly wifly;
 
+// Telnet Stuff
+#define IAC 255
+
 // ----------------------------------------------------------
 
 char temp[100];
@@ -49,7 +52,7 @@ void setup()
  
   pinMode(RTS, INPUT);
   
-  display2("Wi-Fi\nInit...");
+  display2("Wi-Fi \nInit...");
   
   boolean ok = wifly.begin(&WifiSerial, &C64Serial);
   
@@ -59,7 +62,7 @@ void setup()
   }
   else
   {
-    display2("Failed!");
+    display2("Wi-Fi \nFailed!");
   }
 }
   
@@ -68,7 +71,7 @@ void loop()
    C64Serial.println();
    C64Serial.println("Commodore 64 Wi-Fi Modem");
    C64Serial.println("Telnet Test");
-   C64Serial.print("Host: ");
+   C64Serial.print("host: ");
    C64Serial.setTimeout(1000);
    
    String readString = "";
@@ -110,7 +113,7 @@ void display2(String message)
    C64Serial.println(message);
 }
 
-void Telnet (String host)
+void Telnet(String host)
 {
    sprintf(temp, "\n\nOpening Telnet connection to %s", host.c_str() );   
    display2(temp);
@@ -125,19 +128,20 @@ void Telnet (String host)
    }
    else
    {
-     display2("Connect\nFailed!");
+     display2("Connect \nFailed!");
+     return;
    }
    
-   TerminalMode();
-   
-   wifly.close();
-   
+   TerminalMode();   
   
-   display2("Connection closed");
+    
+ 
 }
 
 void TerminalMode()
-{
+{ 
+   C64Serial.println("\nDetermining Connection Type\n"); 
+   CheckTelnet();
    C64Serial.println("\nEntering Terminal Mode\n");
   
    while (wifly.available() != -1) // -1 means closed
@@ -152,4 +156,113 @@ void TerminalMode()
         wifly.write( C64Serial.read() );
      }
    }
+   
+    wifly.close();
+    display2("Connection closed");
+}
+
+
+
+void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host
+{
+  int inpint, verbint, optint;                         //    telnet parameters as integers
+  
+  // Wait for first character
+  inpint = PeekByte();  
+  if (inpint != IAC)  
+  {
+    C64Serial.println("Raw TCP Connection Detected");
+    return;   // Not a telnet session
+  }
+  
+  C64Serial.println("Telnet Connection Detected");
+  
+  // IAC handling
+//  SendTelnetParameters();    // Start off with negotiating
+  
+  while (true)
+  {
+    inpint = PeekByte();       //      peek at next character
+     
+    if (inpint != IAC)  
+    {
+      C64Serial.print("Received inpint=");
+      C64Serial.println(inpint);
+      C64Serial.println("End of IAC Negotiation");
+      return;   // Let Terminal mode handle character
+    }
+    
+    inpint = ReadByte();    // Eat IAC character    
+    verbint = ReadByte();   // receive negotiation verb character
+        
+    C64Serial.print("Received verbint=");
+    C64Serial.println(verbint);
+        
+    if (verbint == - 1) continue;                //          if negotiation verb character is nothing break the routine  (should never happen)
+        
+    switch (verbint) {                             //          evaluate negotiation verb character
+        case IAC:                                    //          if negotiation verb character is 255 (restart negotiation)
+          continue;                                     //            break the routine
+          
+        case 251:                                    //          if negotiation verb character is 251 (will) or
+        case 252:                                    //          if negotiation verb character is 252 (wont) or
+        case 253:                                    //          if negotiation verb character is 253 (do) or
+        case 254:                                    //          if negotiation verb character is 254 (dont)
+          optint = ReadByte();                   //            receive negotiation option character
+          
+           C64Serial.print("Received optint=");
+           C64Serial.println(optint);
+          
+          if (optint == -1) continue;                   //            if negotiation option character is nothing break the routine  
+          
+          
+          switch (optint) {            
+            
+            case 3:                                   // if negotiation option character is 3 (suppress-go-ahead)
+              SendTelnetDoWill(verbint, optint);
+              break;
+              
+          default:                                     //        if negotiation option character is none of the above (all others)
+              SendTelnetDontWont(verbint, optint);
+            break;                                     //          break the routine
+      }
+    }
+  } 
+}
+
+void SendTelnetDoWill(int verbint, int optint)
+{
+  wifly.write(IAC);                           // send character 255 (start negotiation)
+  wifly.write(verbint == 253 ? 253 : 251);    // send character 253 (do) if negotiation verb character was 253 (do) else send character 251 (will)
+  wifly.write(optint);
+}
+
+void SendTelnetDontWont(int verbint, int optint)
+{
+  wifly.write(IAC);                           // send character 255 (start negotiation)
+  wifly.write(verbint == 253 ? 252 : 254);    // send character 252 (wont) if negotiation verb character was 253 (do) else send character 254 (dont)
+  wifly.write(optint);
+}
+
+void SendTelnetParameters()
+{
+  wifly.write(IAC);                           // send character 255 (start negotiation)
+  wifly.write(254);                           // send character 254 (dont)
+  wifly.write(34);                            // linemode
+  
+  wifly.write(IAC);                           // send character 255 (start negotiation)
+  wifly.write(254);                           // send character 253 (do)
+  wifly.write(1);                             // echo
+}
+
+int ReadByte()
+{
+    while (wifly.available() == 0) {}   
+    return wifly.read();
+}
+
+int PeekByte()
+{
+    while (wifly.available() == 0) {}   
+    return wifly.peek();
 }
