@@ -11,8 +11,8 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define WIFI_BAUD 4800
-#define C64_BAUD  9600
+#define WIFI_BAUD 2400
+#define C64_BAUD  2400
 
 // Configuration 0v2: Wifi Hardware, C64 Software.  -------------------------------------
 
@@ -74,14 +74,15 @@ void setup()
 void loop()
 {
   C64Serial.println();
-  C64Serial.println(F("Commodore 64 Wi-Fi Modem\n"));
+  C64Serial.println(F("Commodore 64 Wi-Fi Modem"));
   ShowStats();
 
   while (true)
   {
     C64Serial.println(F("\n1. Telnet to host or BBS"));
     C64Serial.println(F("2. Wait for incoming connection"));
-    C64Serial.println(F("3. Terminal Mode (direct to WiFly)"));
+    C64Serial.println(F("3. Configuration"));
+    C64Serial.println(F("4. Terminal Mode (direct to WiFly)"));
     int option = ReadByte(C64Serial);
 
     switch (option)
@@ -91,8 +92,11 @@ void loop()
 
       case '2': Incoming();
         return;
+      
+      case '3': Configuration();
+        return;
 
-      case '3': RawTerminalMode();
+      case '4': RawTerminalMode();
         return;
 
       default: C64Serial.println(F("Unknown option, try again"));
@@ -235,7 +239,7 @@ void Telnet(String host, int port)
   }
 
   C64Serial.println(F("Determining Connection Type"));
-  CheckTelnet();
+//  CheckTelnet();
   TerminalMode();
 }
 
@@ -309,11 +313,11 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
   inpint = PeekByte(wifly);
   if (inpint != IAC)
   {
-    C64Serial.println("Raw TCP Connection Detected");
+    C64Serial.println(F("Raw TCP Connection Detected"));
     return;   // Not a telnet session
   }
 
-  C64Serial.println("Telnet Connection Detected");
+  C64Serial.println(F("Telnet Connection Detected"));
 
   // IAC handling
   SendTelnetParameters();    // Start off with negotiating
