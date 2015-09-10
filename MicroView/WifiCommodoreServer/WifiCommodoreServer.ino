@@ -82,6 +82,7 @@ void loop()
   while (true)
   {
     RawTCPConnect(COMMODORE_SERVER, COMMODORE_PORT);
+    delay(1000);
   }
 }
 
@@ -195,4 +196,10 @@ void TerminalMode()
 
   wifly.close();
   display2("Connection closed");
+}
+
+int ReadByte(Stream& in)
+{
+  while (in.available() == 0) {}
+  return in.read();
 }
