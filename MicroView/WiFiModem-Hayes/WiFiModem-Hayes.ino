@@ -4,9 +4,7 @@
    Leif Bloomquist, Payton Byrd, Greg Alekel 
 */
 
-#include <EEPROM.h>
 #include <MicroView.h>
-#include <elapsedMillis.h>
 #include <SoftwareSerial.h>
 #include <WiFlyHQ.h>
 #include "..\..\..\hayesduino\ModemBase.h"
@@ -35,15 +33,38 @@ ModemBase modem;
 
 // Telnet Stuff
 #define IAC 255
-
 String lastHost = "";
 int lastPort = 23;
 
 //Misc
 char temp[100];
 
+// ------------------------------------------------------------------------------------------------
+
+void Display(String message)
+{
+	uView.clear(PAGE);	// erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
+	uView.setCursor(0, 0);
+	uView.println(message);
+	uView.display();
+}
+
+void DisplayBoth(String message, bool fix = true)
+{
+	C64Serial.println(message);
+
+	if (fix)
+	{
+		message.replace(' ', '\n');
+	}
+
+	Display(message);
+}
+
 // ----------------------------------------------------------
-void dialout(char* host, ModemBase *modm)
+// Callbacks 
+
+void dialout(char* host)
 {
 	char* index;
 	uint16_t port = 23;
@@ -62,32 +83,13 @@ void dialout(char* host, ModemBase *modm)
 		port = 5190;
 	}
 
-	Telnet(hostname, port);
-
-	delay(1000);
+	Open(hostname, port); 
 }
 
-// ------------------------------------------------------------------------------------------------
-
-
-void Display(String message)
+void disconnect()
 {
-	uView.clear(PAGE);	// erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
-	uView.setCursor(0, 0);
-	uView.println(message);
-	uView.display();
-}
-
-void DisplayBoth(String message, bool fix = true)
-{
-	C64Serial.println(message);
-	Display(message);
-
-	if (fix)
-	{
-		message.replace(' ', '\n');
-	}
-	
+	wifly.close();
+	DisplayBoth(F("NO CARRIER"), false);	
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -107,7 +109,8 @@ void setup()
 	// Virtual Modem (Hayesduino)
 	DisplayBoth(F("Modem Init..."));
 	delay(1000);
-	modem.begin(&C64Serial, &wifly, &dialout);
+	modem.setDefaultBaud(C64_BAUD);
+	modem.begin(&C64Serial, &wifly, &dialout, &disconnect);
 
 	// Wi-Fi
 	DisplayBoth(F("Wi-Fi Init..."));
@@ -123,57 +126,32 @@ void setup()
 	}
 
 	C64Serial.println(F("\nCommodore 64 Wi-Fi Modem"));
-	C64Serial.println(F("Hayes Modem Emulation Mode\n"));
+	C64Serial.println(F("Hayes Emulation Mode\n"));
 	modem.ShowStats();
 	C64Serial.println(F("\nREADY."));
 }
 
 void loop()
 {
-	// Check for remote disconnect
-	if (modem.getIsConnected() && !wifly.isConnected())
-	{
-		modem.disconnect();
+	// Check for new remote connection
+	if (!modem.getIsConnected() && !modem.getIsRinging() && wifly.isConnected())
+	{		
+		wifly.println(F("CONNECTING TO SYSTEM."));		
+		Display("INCOMING\nCALL");
+		modem.ring();
 		return;
 	}
 
-	// Check for new remote connection
-	if (!modem.getIsConnected() && wifly.isConnected())
-	{		
-		for (int i = 0; i < 5; ++i)
-		{
-			wifly.println(".");   // What's this for??
-		}
-		wifly.println(F("CONNECTING TO SYSTEM."));		
-
-		modem.connect(&wifly);
-	}
-
-	// If connected, handle incoming data
-	char inbound;
-
-	if (wifly.isConnected())
+	// If connected, handle incoming data	
+	if (modem.getIsConnected() && wifly.isConnected())
 	{
-		if (!modem.getIsCommandMode() && wifly.available() > 0)
-		{
-			//digitalWrite(DCE_RTS, HIGH);
-			inbound = wifly.read();
-			modem.write(inbound);			
-		}
-		else if (!modem.getIsCommandMode() && wifly.available() == 0)
-		{
-			//digitalWrite(DCE_RTS, LOW);
-		}
-		else if (modem.getIsCommandMode() && wifly.available() > 0)
+		// Echo an error back to remote terminal if in command mode.
+		if (modem.getIsCommandMode() && wifly.available() > 0)
 		{
 			wifly.println(F("modem is in command mode."));
 		}
 	}
-	else if (modem.getIsConnected() || !modem.getIsCommandMode())   // Handle unexpected remote disconnect, I think?
-	{
-//		delay(5000);
-		modem.disconnect();
-	}
+
 	else if (!modem.getIsConnected() &&	modem.getIsCommandMode())
 	{
 		//digitalWrite(DCE_RTS, LOW);
@@ -183,7 +161,8 @@ void loop()
 	//	digitalWrite(DTE_RTS, LOW);
 	//}
 
-	modem.processData(&wifly);
+	// Handle all other data arriving on the serial port of the virtual modem.
+	modem.processData();
 
 	//digitalWrite(DCE_RTS, HIGH);
 
@@ -191,7 +170,7 @@ void loop()
 
 // ----------------------------------------------------------
 
-boolean Telnet(String host, int port)
+boolean Open(String host, int port)
 {
 	sprintf(temp, "\nConnecting to %s", host.c_str());
 	DisplayBoth(temp, false);
@@ -206,8 +185,7 @@ boolean Telnet(String host, int port)
 		DisplayBoth(temp, false);
 
 		CheckTelnet();
-		TerminalMode();
-
+		modem.TerminalMode();
 		return true;
 	}
 	else
@@ -218,68 +196,6 @@ boolean Telnet(String host, int port)
 
 }
 
-void TerminalMode()
-{
-	C64Serial.println(F("*** Terminal Mode ***"));
-
-	while (wifly.available() != -1) // -1 means closed
-	{
-		while (wifly.available() > 0)
-		{
-			C64Serial.write(wifly.read());
-		}
-
-		while (C64Serial.available() > 0)
-		{
-			wifly.write(C64Serial.read());
-		}
-
-		// Alternate check for open/closed state
-		if (!wifly.isConnected())
-		{
-			break;
-		}
-	}
-
-	wifly.close();
-	DisplayBoth("Connection closed", false);
-}
-
-// Raw Terminal Mode.  There is no escape.
-void RawTerminalMode()
-{
-	bool changed = false;
-	long rnxv_chars = 0;
-	long c64_chars = 0;
-
-	C64Serial.println(F("*** Terminal Mode (Debug) ***"));
-	Display(F("Debug\nMode"));
-
-	while (true)
-	{
-		while (wifly.available() > 0)
-		{
-			rnxv_chars++;
-			C64Serial.write(wifly.read());
-			changed = true;
-		}
-
-		while (C64Serial.available() > 0)
-		{
-			c64_chars++;
-			wifly.write(C64Serial.read());
-			changed = true;
-		}
-
-		if (changed)
-		{
-			sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
-			Display(temp);
-		}
-	}
-}
-
-
 void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host
 {
 	int inpint, verbint, optint;                         //    telnet parameters as integers
@@ -288,11 +204,11 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
 	inpint = PeekByte(wifly);
 	if (inpint != IAC)
 	{
-		C64Serial.println(F("Raw TCP Connection Detected"));
+//		C64Serial.println(F("Raw TCP Connection Detected"));
 		return;   // Not a telnet session
 	}
 
-	C64Serial.println(F("Telnet Connection Detected"));
+//	C64Serial.println(F("Telnet Connection Detected"));
 
 	// IAC handling
 	SendTelnetParameters();    // Start off with negotiating
@@ -371,4 +287,3 @@ int PeekByte(Stream& in)
 	while (in.available() == 0) {}
 	return in.peek();
 }
-
