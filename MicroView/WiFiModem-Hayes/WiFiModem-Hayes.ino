@@ -117,7 +117,7 @@ void setup()
 	boolean ok = wifly.begin(&WifiSerial, &C64Serial);
 
 	if (ok)
-	{
+	{		
 		DisplayBoth("Wi-Fi Modem Ready!");
 	}
 	else
@@ -125,9 +125,11 @@ void setup()
 		DisplayBoth("Wi-Fi Failed!");
 	}
 
+	wifly.close();
+
 	C64Serial.println(F("\nCommodore 64 Wi-Fi Modem"));
 	C64Serial.println(F("Hayes Emulation Mode\n"));
-	modem.ShowStats();
+	modem.ShowInfo();
 	C64Serial.println(F("\nREADY."));
 }
 
