@@ -142,6 +142,13 @@ void loop()
 		return;
 	}
 
+	// Check for a dropped remote connection while ringing
+	if (modem.getIsRinging() && !wifly.isConnected())
+	{
+		modem.disconnect();
+		return;
+	}
+
 	// If connected, handle incoming data	
 	if (modem.getIsConnected() && wifly.isConnected())
 	{
