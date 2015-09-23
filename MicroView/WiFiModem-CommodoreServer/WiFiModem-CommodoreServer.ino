@@ -1,6 +1,6 @@
 /*
      Commodore 64 - MicroView - Wi-fi Cart
-     This sketch connects to CommodoreServer for V1541 from CommodoreServer
+     This sketch connects to CommodoreServer for V1541
      Leif Bloomquist, Greg Alekel
 */
 
@@ -72,12 +72,11 @@ void setup()
 }
 
 void loop()
-{
- 
+{ 
   C64Serial.println();
   C64Serial.println(F("Commodore 64 Wi-Fi Modem"));
   C64Serial.println(F("CommodoreServer Client"));
-  ShowStats();
+  ShowStatsExtended();
  
   while (true)
   {
@@ -132,7 +131,7 @@ String GetInput()
 
 // ----------------------------------------------------------
 
-void ShowStats()
+void ShowStatsExtended()
 {
   char mac[20];
   char ip[20];
@@ -161,8 +160,7 @@ void RawTCPConnect(String host, int port)
 
   if (ok)
   {
-    sprintf(temp, "Connected to %s", host.c_str() );
-    display2(temp);
+	display2("Connected!");
   }
   else
   {

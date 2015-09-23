@@ -93,7 +93,7 @@ void loop()
       case '2': Incoming();
         return;
       
-      case '3': Configuration();
+//      case '3': Configuration();
         return;
 
       case '4': RawTerminalMode();
@@ -135,6 +135,8 @@ void doTelnet()
   }
   else
   {
+	 // TODO, what if no last port?
+
     Telnet(lastHost, lastPort);
   }
 }
@@ -239,7 +241,7 @@ void Telnet(String host, int port)
   }
 
   C64Serial.println(F("Determining Connection Type"));
-//  CheckTelnet();
+  CheckTelnet();
   TerminalMode();
 }
 
