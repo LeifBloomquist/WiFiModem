@@ -48,9 +48,6 @@ void dialout(char* host, ModemBase *modm)
 	char* index;
 	uint16_t port = 23;
 	String hostname = String(host);
-	char hostnamebuffer[81];
-
-	for (int i = 0; i<81; ++i) hostnamebuffer[i] = '\0';
 
 	if ((index = strstr(host, ":")) != NULL)
 	{
@@ -84,12 +81,13 @@ void Display(String message)
 void DisplayBoth(String message, bool fix = true)
 {
 	C64Serial.println(message);
+	Display(message);
 
 	if (fix)
 	{
 		message.replace(' ', '\n');
 	}
-	Display(message);
+	
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -109,7 +107,7 @@ void setup()
 	// Virtual Modem (Hayesduino)
 	DisplayBoth(F("Modem Init..."));
 	delay(1000);
-	modem.begin(&WifiSerial, &C64Serial, &dialout);
+	modem.begin(&C64Serial, &wifly, &dialout);
 
 	// Wi-Fi
 	DisplayBoth(F("Wi-Fi Init..."));
@@ -124,10 +122,10 @@ void setup()
 		DisplayBoth("Wi-Fi Failed!");
 	}
 
-	C64Serial.println(F("\n\nCommodore 64 Wi-Fi Modem"));
+	C64Serial.println(F("\nCommodore 64 Wi-Fi Modem"));
 	C64Serial.println(F("Hayes Modem Emulation Mode\n"));
-	ShowStats();
-	C64Serial.println(F("READY."));
+	modem.ShowStats();
+	C64Serial.println(F("\nREADY."));
 }
 
 void loop()
@@ -141,13 +139,14 @@ void loop()
 
 	// Check for new remote connection
 	if (!modem.getIsConnected() && wifly.isConnected())
-	{
-		modem.connect(&wifly);
-		for (int i = 0; i < 25; ++i)
+	{		
+		for (int i = 0; i < 5; ++i)
 		{
 			wifly.println(".");   // What's this for??
 		}
 		wifly.println(F("CONNECTING TO SYSTEM."));		
+
+		modem.connect(&wifly);
 	}
 
 	// If connected, handle incoming data
@@ -192,23 +191,6 @@ void loop()
 
 // ----------------------------------------------------------
 
-void ShowStats()
-{
-	char mac[20];
-	char ip[20];
-	char ssid[20];
-
-	wifly.getMAC(mac, 20);
-	wifly.getIP(ip, 20);
-	wifly.getSSID(ssid, 20);
-
-	C64Serial.print(F("MAC Address: "));   C64Serial.println(mac);
-	C64Serial.print(F("IP Address:  "));   C64Serial.println(ip);
-	C64Serial.print(F("Wi-Fi SSID:  "));   C64Serial.println(ssid);
-}
-
-// ----------------------------------------------------------
-
 boolean Telnet(String host, int port)
 {
 	sprintf(temp, "\nConnecting to %s", host.c_str());
@@ -222,6 +204,11 @@ boolean Telnet(String host, int port)
 	{
 		sprintf(temp, "Connected to %s", host.c_str());
 		DisplayBoth(temp, false);
+
+		CheckTelnet();
+		TerminalMode();
+
+		return true;
 	}
 	else
 	{
@@ -229,8 +216,6 @@ boolean Telnet(String host, int port)
 		return false;
 	}
 
-	CheckTelnet();
-	TerminalMode();
 }
 
 void TerminalMode()
