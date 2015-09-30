@@ -8,11 +8,12 @@
 #include <elapsedMillis.h>
 #include <SoftwareSerial.h>
 #include <WiFlyHQ.h>
+#include <digitalWriteFast.h>
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define WIFI_BAUD 2400
-#define C64_BAUD  2400
+#define WIFI_BAUD 9600
+#define C64_BAUD  9600
 
 // Configuration 0v2: Wifi Hardware, C64 Software.  -------------------------------------
 
@@ -20,17 +21,20 @@
 // RxD is D0  (Hardware Serial)
 // TxD is D1  (Hardware Serial)
 
-// Additional RS-232 lines to C64 User Port
-#define RTS  A5
-#define DTR  A4
-#define RI   A3
-#define DCD  A2
-#define CTS  A1
-#define DSR  A0
-#define TxD  6
-#define RxD  5
+#define WIFI_CTS  2
+#define WIFI_RTS  3
 
-SoftwareSerial C64Serial(RxD, TxD);
+// Additional RS-232 lines to C64 User Port
+#define C64_RTS  A5
+#define C64_DTR  A4
+#define C64_RI   A3
+#define C64_DCD  A2
+#define C64_CTS  A1
+#define C64_DSR  A0
+#define C64_TxD  6
+#define C64_RxD  5
+
+SoftwareSerial C64Serial(C64_RxD, C64_TxD);
 HardwareSerial& WifiSerial = Serial;
 WiFly wifly;
 
@@ -55,19 +59,29 @@ void setup()
 
   C64Serial.setTimeout(1000);
 
-  pinMode(RTS, INPUT);
+  pinModeFast(C64_RTS, INPUT);
+  pinModeFast(C64_CTS, OUTPUT);
 
-  display2("Wi-Fi \nInit...");
+  pinModeFast(WIFI_RTS, INPUT);
+  pinModeFast(WIFI_CTS, OUTPUT);
+
+  // Force CTS High on both sides to start
+  digitalWriteFast(WIFI_CTS, HIGH);
+  digitalWriteFast(C64_CTS, HIGH);
+
+  display(F("Wi-Fi\nInit..."));
+  C64Serial.println(F("Wi-Fi Init..."));
 
   boolean ok = wifly.begin(&WifiSerial, &C64Serial);
 
   if (ok)
   {
-    display2("READY.");
+    display2(F("READY."));
   }
   else
   {
-    display2("Wi-Fi Failed!");
+      display(F("Wi-Fi\nFailed!"));
+      C64Serial.println(F("Wi-Fi Failed!"));
   }
 }
 
@@ -79,11 +93,17 @@ void loop()
 
   while (true)
   {
-    C64Serial.println(F("\n1. Telnet to host or BBS"));
-    C64Serial.println(F("2. Wait for incoming connection"));
-    C64Serial.println(F("3. Configuration"));
-    C64Serial.println(F("4. Terminal Mode (direct to WiFly)"));
-    int option = ReadByte(C64Serial);
+	  C64Serial.println();
+	  C64Serial.println(F("1. Telnet to host or BBS"));
+      C64Serial.println(F("2. Wait for incoming connection"));
+      C64Serial.println(F("3. Configuration"));
+      C64Serial.println(F("4. Terminal Mode (direct to WiFly)"));
+      C64Serial.println();
+      C64Serial.print(F("Select:"));      
+
+      int option = ReadByte(C64Serial);
+      C64Serial.println((char)option);
+      
 
     switch (option)
     {
@@ -99,6 +119,13 @@ void loop()
       case '4': RawTerminalMode();
         return;
 
+	  case '5': RawTerminalModeFlowControl();
+		  return;
+
+	  case '\n': 
+      case '\r':
+          continue;
+
       default: C64Serial.println(F("Unknown option, try again"));
         continue;
     }
@@ -111,33 +138,39 @@ void doTelnet()
 
   C64Serial.print("\nTelnet host: ");
   String hostName = GetInput();
-  hostName.trim();
 
   if (hostName.length() > 0)
   {
-    C64Serial.print("\nPort (23): ");
-    String strport = GetInput();
-    strport.trim();
+      C64Serial.print(F("\nPort ("));
+      C64Serial.print(lastPort);
+      C64Serial.print(F("): "));
+        
+      String strport = GetInput();
 
-    if (strport.length() > 0)
-    {
-      port = strport.toInt();
-    }
-    else
-    {
-      port = lastPort;
-    }
+      if (strport.length() > 0)
+      {
+         port = strport.toInt();
+      }
+      else
+      {
+        port = lastPort;
+      }
 
-    lastHost = hostName;
-    lastPort = port;
+      lastHost = hostName;
+      lastPort = port;
 
-    Telnet(hostName, port);
+      Telnet(hostName, port);
   }
   else
   {
-	 // TODO, what if no last port?
-
-    Telnet(lastHost, lastPort);
+      if (lastHost.length() > 0)
+      {
+          Telnet(lastHost, lastPort);
+      }
+      else
+      {
+          return;
+      }    
   }
 }
 
@@ -151,7 +184,6 @@ void display(String message)
   uView.display();
 }
 
-
 void display2(String message)
 {
   display(message);
@@ -161,6 +193,13 @@ void display2(String message)
 // ----------------------------------------------------------
 
 String GetInput()
+{
+    String temp = GetInput_Raw();
+    temp.trim();
+    return temp;
+}
+
+String GetInput_Raw()
 {
   char in_char[100];
   int max_length = sizeof(in_char);
@@ -205,16 +244,33 @@ void ShowStats()
 
 void Incoming()
 {
-  int localport = wifly.getPort();
-  C64Serial.print(F("\nWaiting for connections on port "));
-  C64Serial.println(localport);
-  
-  // Idle here until connected
-  while (!wifly.isConnected())  {}
+    int localport = wifly.getPort();
 
-  C64Serial.print(F("Incoming Connection")); 
+    C64Serial.println();
+    C64Serial.print(F("Incoming port ("));
+    C64Serial.print(localport);
+    C64Serial.print(F("): "));
+   
+    String strport = GetInput();
+    
+    if (strport.length() > 0)
+    {
+        localport = strport.toInt();
+        wifly.setPort(localport);
+    }
+
+    localport = wifly.getPort();
+    
+    C64Serial.println();
+    C64Serial.print(F("Waiting for connections on port "));
+    C64Serial.println(localport);
+  
+    // Idle here until connected
+    while (!wifly.isConnected())  {}
+
+    C64Serial.println(F("Incoming Connection")); 
  
-  TerminalMode();
+    TerminalMode();
 }
 
 
@@ -269,7 +325,7 @@ void TerminalMode()
   }
 
   wifly.close();
-  display2("Connection closed");
+  display2(F("Connection closed"));
 }
 
 // Raw Terminal Mode.  There is no escape.
@@ -284,26 +340,75 @@ void RawTerminalMode()
 
   while (true)
   {
-    while (wifly.available() > 0)
-    {
-      rnxv_chars++;
-      C64Serial.write( wifly.read() );
-      changed=true;
-    }
+		while (wifly.available() > 0)
+		{
+			rnxv_chars++;
+			C64Serial.write( wifly.read() );
+			changed=true;
+		}
 
-    while (C64Serial.available() > 0)
-    {
-      c64_chars++;
-      wifly.write( C64Serial.read() );
-      changed=true;
-    }
+		while (C64Serial.available() > 0)
+		{
+			c64_chars++;
+			wifly.write( C64Serial.read() );
+			changed=true;
+		}
     
-    if (changed)
-    {  
-       sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
-       display(temp);
-    }
+		if (changed)
+		{  
+			sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
+			display(temp);
+		}
   }
+}
+
+// Raw Terminal Mode.  There is no escape.
+void RawTerminalModeFlowControl()
+{
+	bool changed = false;
+	long rnxv_chars = 0;
+	long c64_chars = 0;
+
+	C64Serial.println(F("*** Terminal Mode (Debug) ***"));
+	display(F("Debug\nMode"));
+
+	while (true)
+	{
+	//	C64Serial.flush();   Goog says this is important, but it locks up C64 comms?
+
+		while (wifly.available() > 0)
+		{
+			rnxv_chars++;
+
+            doFlowControl();
+			C64Serial.write(wifly.read()); 
+
+			changed = true;
+		}       
+
+		while (C64Serial.available() > 0)
+		{            
+            c64_chars++;
+			wifly.write(C64Serial.read());
+			changed = true;
+		}
+
+		if (changed)
+		{
+			sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
+			display(temp);
+		}
+	}
+}
+
+inline void doFlowControl()
+{  
+    // Check that C64 is ready to receive
+    while (digitalReadFast(C64_RTS) == LOW)  // If not...
+    {
+        digitalWriteFast(WIFI_CTS, LOW);     // ..stop data from Wi-Fi
+    };
+    digitalWriteFast(WIFI_CTS, HIGH);
 }
 
 
