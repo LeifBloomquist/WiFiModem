@@ -6,3 +6,4 @@ C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.Properties.Res
 C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.csproj.GenerateResource.Cache
 C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.exe
 C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.pdb
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.csprojResolveAssemblyReference.cache

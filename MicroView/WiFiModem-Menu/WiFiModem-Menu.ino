@@ -61,7 +61,7 @@ void setup()
 
   C64Serial.setTimeout(1000);
 
-//#ifdef FLOWCONTROL
+#ifdef FLOWCONTROL
 
   pinModeFast(C64_RTS, INPUT);
   pinModeFast(C64_CTS, OUTPUT);
@@ -69,11 +69,11 @@ void setup()
   pinModeFast(WIFI_RTS, INPUT);
   pinModeFast(WIFI_CTS, OUTPUT);
 
-  // Force CTS High on both sides to start
+  // Force CTS to defaults on both sides to start
   digitalWriteFast(WIFI_CTS, LOW);
   digitalWriteFast(C64_CTS, HIGH);
 
-//#endif
+#endif
 
   Display(F("Wi-Fi\nInit..."));
   C64Serial.println(F("Wi-Fi Init..."));
@@ -437,17 +437,7 @@ void RawTerminalModeFlowControl()
 		{
 			rnxv_chars++;
 
-            // Check that C64 is ready to receive
-            if (digitalReadFast(C64_RTS) == LOW)  // If not...
-            {
-                digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi and wait
-                //Display("RTS");                
-
-                while (digitalReadFast(C64_RTS) == LOW) {};  // 
-
-                c64_rts++;
-            };            
-            digitalWriteFast(WIFI_CTS, LOW);
+            doFl
 
 			C64Serial.write(wifly.read()); 
 
@@ -469,18 +459,15 @@ void RawTerminalModeFlowControl()
 	}
 }
 
-/*
 inline void DoFlowControl()
 {  
     // Check that C64 is ready to receive
-    while (digitalReadFast(C64_RTS) == LOW)  // If not...
+    while (digitalReadFast(C64_RTS) == LOW)   // If not...
     {
-        digitalWriteFast(WIFI_CTS, LOW);     // ..stop data from Wi-Fi
+        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi and wait
     };
-    digitalWriteFast(WIFI_CTS, HIGH);
+    digitalWriteFast(WIFI_CTS, LOW);
 }
-*/
-
 
 void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host
 {

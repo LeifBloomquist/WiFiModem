@@ -55,7 +55,7 @@ namespace TCPTester
 
             for (int i=0; i<1000; i++)
             {
-                message += line;
+                message += (int)i + ":" + line;
             }
 
             Byte[] data = System.Text.Encoding.ASCII.GetBytes(message);
