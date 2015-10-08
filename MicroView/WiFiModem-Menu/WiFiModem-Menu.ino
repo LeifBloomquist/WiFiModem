@@ -12,7 +12,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-//#define FLOWCONTROL 1
+#define FLOWCONTROL 1
 
 #define WIFI_BAUD 9600
 #define C64_BAUD  9600 
@@ -23,8 +23,8 @@
 // RxD is D0  (Hardware Serial)
 // TxD is D1  (Hardware Serial)
 
-#define WIFI_CTS  2
-#define WIFI_RTS  3
+#define WIFI_RTS  2
+#define WIFI_CTS  3
 
 // Additional RS-232 lines to C64 User Port
 #define C64_RTS  A5
@@ -61,7 +61,7 @@ void setup()
 
   C64Serial.setTimeout(1000);
 
-#ifdef FLOWCONTROL
+//#ifdef FLOWCONTROL
 
   pinModeFast(C64_RTS, INPUT);
   pinModeFast(C64_CTS, OUTPUT);
@@ -70,10 +70,10 @@ void setup()
   pinModeFast(WIFI_CTS, OUTPUT);
 
   // Force CTS High on both sides to start
-  digitalWriteFast(WIFI_CTS, HIGH);
+  digitalWriteFast(WIFI_CTS, LOW);
   digitalWriteFast(C64_CTS, HIGH);
 
-#endif
+//#endif
 
   Display(F("Wi-Fi\nInit..."));
   C64Serial.println(F("Wi-Fi Init..."));
@@ -424,8 +424,9 @@ void RawTerminalModeFlowControl()
 	bool changed = false;
 	long rnxv_chars = 0;
 	long c64_chars = 0;
+    long c64_rts = 0;
 
-	C64Serial.println(F("*** Terminal Mode (Debug) ***"));
+	C64Serial.println(F("*** Terminal Mode (Debug+Flow) ***"));
 	Display(F("Debug\nMode"));
 
 	while (true)
@@ -436,9 +437,18 @@ void RawTerminalModeFlowControl()
 		{
 			rnxv_chars++;
 
-#ifdef FLOWCONTROL
-            DoFlowControl();
-#endif
+            // Check that C64 is ready to receive
+            if (digitalReadFast(C64_RTS) == LOW)  // If not...
+            {
+                digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi and wait
+                //Display("RTS");                
+
+                while (digitalReadFast(C64_RTS) == LOW) {};  // 
+
+                c64_rts++;
+            };            
+            digitalWriteFast(WIFI_CTS, LOW);
+
 			C64Serial.write(wifly.read()); 
 
 			changed = true;
@@ -451,14 +461,15 @@ void RawTerminalModeFlowControl()
 			changed = true;
 		}
 
-		if (changed)
+        if (true) // changed)
 		{
-			sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
+            sprintf(temp, "Wifi:%ld\n\nC64: %ld\n\nRTS: %ld", rnxv_chars, c64_chars, c64_rts);
 			Display(temp);
 		}
 	}
 }
 
+/*
 inline void DoFlowControl()
 {  
     // Check that C64 is ready to receive
@@ -468,6 +479,7 @@ inline void DoFlowControl()
     };
     digitalWriteFast(WIFI_CTS, HIGH);
 }
+*/
 
 
 void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host

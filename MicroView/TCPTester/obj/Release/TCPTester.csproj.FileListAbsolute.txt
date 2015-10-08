@@ -1,0 +1,8 @@
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\bin\Release\TCPTester.exe.config
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\bin\Release\TCPTester.exe
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\bin\Release\TCPTester.pdb
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.Form1.resources
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.Properties.Resources.resources
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.csproj.GenerateResource.Cache
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.exe
+C:\Leif\GitHub\WiFiCart\MicroView\TCPTester\obj\Release\TCPTester.pdb
