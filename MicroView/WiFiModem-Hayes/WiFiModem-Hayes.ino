@@ -79,8 +79,8 @@ void dialout(char* host)
 
 	if (hostname == "5551212")
 	{
-		hostname = "qlink.lyonlabs.org";
-		port = 5190;
+        QuantumLinkReloaded();
+        return;
 	}
 
 	Open(hostname, port); 
@@ -204,6 +204,29 @@ boolean Open(String host, int port)
 	}
 
 }
+
+// -------------------------------------------------------------------------------------------------------------
+// QuantumLink Reloaded! Support
+
+void QuantumLinkReloaded()
+{
+
+    Open("qlink.lyonlabs.org", 5190);
+
+}
+
+hostname = ;
+port = 5190;
+
+//Prepare to change the Arduino baud rate.
+Serial.flush();
+delay(2);
+Serial.end();
+
+//Change the arduino's baud rate.
+Serial.begin(115200);
+
+
 
 void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host
 {
