@@ -40,7 +40,7 @@
             this.IPAddress.Name = "IPAddress";
             this.IPAddress.Size = new System.Drawing.Size(148, 20);
             this.IPAddress.TabIndex = 0;
-            this.IPAddress.Text = "192.168.7.110";
+            this.IPAddress.Text = "192.168.7.109";
             // 
             // ConnectButton
             // 

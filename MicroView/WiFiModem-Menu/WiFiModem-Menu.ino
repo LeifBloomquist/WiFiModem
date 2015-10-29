@@ -8,16 +8,14 @@
 #include <elapsedMillis.h>
 #include <SoftwareSerial.h>
 #include <WiFlyHQ.h>
+#include <EEPROM.h>
 #include <digitalWriteFast.h>
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define FLOWCONTROL 1
+#define BAUD_RATE 2400
 
-#define WIFI_BAUD 9600
-#define C64_BAUD  9600 
-
-// Configuration 0v2: Wifi Hardware, C64 Software.  -------------------------------------
+// Configuration 0v3: Wifi Hardware, C64 Software.  -------------------------------------
 
 // Wifi
 // RxD is D0  (Hardware Serial)
@@ -56,24 +54,23 @@ void setup()
   uView.setFontType(0);
   uView.clear(ALL);	// erase hardware memory inside the OLED controller
 
-  C64Serial.begin(C64_BAUD);
-  WifiSerial.begin(WIFI_BAUD);
+  C64Serial.begin(BAUD_RATE);
+  WifiSerial.begin(BAUD_RATE);
 
   C64Serial.setTimeout(1000);
 
-#ifdef FLOWCONTROL
+  if (BAUD_RATE > 2400)
+  {
+      pinModeFast(C64_RTS, INPUT);
+      pinModeFast(C64_CTS, OUTPUT);
 
-  pinModeFast(C64_RTS, INPUT);
-  pinModeFast(C64_CTS, OUTPUT);
+      pinModeFast(WIFI_RTS, INPUT);
+      pinModeFast(WIFI_CTS, OUTPUT);
 
-  pinModeFast(WIFI_RTS, INPUT);
-  pinModeFast(WIFI_CTS, OUTPUT);
-
-  // Force CTS to defaults on both sides to start
-  digitalWriteFast(WIFI_CTS, LOW);
-  digitalWriteFast(C64_CTS, HIGH);
-
-#endif
+      // Force CTS to defaults on both sides to start, so data can get through
+      digitalWriteFast(WIFI_CTS, LOW);
+      digitalWriteFast(C64_CTS, HIGH);
+  }
 
   Display(F("Wi-Fi\nInit..."));
   C64Serial.println(F("Wi-Fi Init..."));
@@ -82,7 +79,8 @@ void setup()
 
   if (ok)
   {
-      DisplayBoth(F("READY."));
+      Display(F("Wi-Fi\nOK!"));
+      C64Serial.println(F("Wi-Fi OK!"));
   }
   else
   {
@@ -96,44 +94,42 @@ void loop()
 {
   C64Serial.println();
   C64Serial.println(F("Commodore Wi-Fi Modem"));
+  C64Serial.print(F("Serial #031 for "));
+  C64Serial.println(F("Marcus Honey"));
   ShowInfo();
 
   while (true)
   {
-	  C64Serial.println();
-	  C64Serial.println(F("1. Telnet to host or BBS"));
-      C64Serial.println(F("2. Wait for incoming connection"));
-      C64Serial.println(F("3. Configuration"));
-      C64Serial.println();
-      C64Serial.print(F("Select:"));      
+    Display(F("READY."));
 
-      int option = ReadByte(C64Serial);
-      C64Serial.println((char)option);
+    C64Serial.println();
+    C64Serial.println(F("1. Telnet to host or BBS"));
+    C64Serial.println(F("2. Wait for incoming connection"));
+    C64Serial.println(F("3. Configuration"));
+    C64Serial.println();
+    C64Serial.print(F("Select:"));      
+
+    int option = ReadByte(C64Serial);
+    C64Serial.println((char)option);
       
     switch (option)
     {
-      case '1': doTelnet();
-        return;
+        case '1': doTelnet();
+            return;
 
-      case '2': Incoming();
-        return;
+        case '2': Incoming();
+            return;
       
-      case '3': Configuration();
-        continue;
+        case '3': Configuration();
+            continue;
 
-      case '4': RawTerminalMode();
-        return;
+        case '\n': 
+        case '\r':
+        case ' ':
+            continue;
 
-	  case '5': RawTerminalModeFlowControl();
-		  return;
-
-	  case '\n': 
-      case '\r':
-      case ' ':
-          continue;
-
-      default: C64Serial.println(F("Unknown option, try again"));
-        continue;
+        default: C64Serial.println(F("Unknown option, try again"));
+            continue;
     }
   }
 }
@@ -160,16 +156,13 @@ void Configuration()
             case '1': ShowInfo();
                 break;
 
-            case '2': //
+            case '2': ChangeSSID();
                 break;
 
             case '3': RawTerminalMode();
                 return;
 
             case '4': return;
-
-            case '5': RawTerminalModeFlowControl();
-                return;
 
             case '\n':
             case '\r':
@@ -179,6 +172,83 @@ void Configuration()
             default: C64Serial.println(F("Unknown option, try again"));
                 continue;
         }
+    }
+}
+
+void ChangeSSID()
+{
+    int mode = -1;
+
+    while (true)
+    {
+        C64Serial.println();
+        C64Serial.println(F("Change SSID"));
+        C64Serial.println();
+        C64Serial.println(F("1. WEP"));
+        C64Serial.println(F("2. WPA / WPA2"));
+        C64Serial.println(F("3. Return to Configuration Menu"));
+        C64Serial.println();
+        C64Serial.print(F("Select:"));
+
+        int option = ReadByte(C64Serial);
+        C64Serial.println((char)option);
+
+        switch (option)
+        {
+        case '1': mode = WIFLY_MODE_WEP;
+            break;
+
+        case '2': mode = WIFLY_MODE_WPA;
+            break;
+
+        case '3': return;
+
+        case '\n':
+        case '\r':
+        case ' ':
+            continue;
+
+        default: C64Serial.println(F("Unknown option, try again"));
+            continue;
+        }
+
+        C64Serial.println();
+        String input;
+        
+        switch (mode)
+        {
+            case WIFLY_MODE_WEP:
+                C64Serial.print(F("Key:"));
+                input = GetInput();
+                wifly.setKey(input.c_str());
+                break;
+
+            case WIFLY_MODE_WPA:
+                C64Serial.print(F("Passphrase:"));
+                input = GetInput();
+                wifly.setPassphrase(input.c_str());
+                break;
+
+            default:  // Should never happen
+                continue;
+        }
+        
+        C64Serial.println();
+        C64Serial.print(F("SSID:"));
+        input = GetInput();
+        boolean ok = wifly.setSSID(input.c_str());
+
+        if (ok)
+        {
+            C64Serial.println(F("SSID Successfully changed"));
+            wifly.reboot();
+            return;
+        }
+        else
+        {
+            C64Serial.println(F("Error Setting SSID"));
+            continue;
+        }        
     }
 }
 
@@ -205,7 +275,7 @@ void doTelnet()
 {
     int port = lastPort;
 
-    C64Serial.print("\nTelnet host: ");
+    C64Serial.print(F("\nTelnet host: "));
     String hostName = GetInput();
 
     if (hostName.length() > 0)
@@ -349,11 +419,10 @@ void Telnet(String host, int port)
   }
   else
   {
-    DisplayBoth("Connect \nFailed!");
+    DisplayBoth(F("Connect \nFailed!"));
     return;
   }
 
-  C64Serial.println(F("Determining Connection Type"));
   CheckTelnet();
   TerminalMode();
 }
@@ -366,12 +435,16 @@ void TerminalMode()
   {
     while (wifly.available() > 0)
     {
-      C64Serial.write( wifly.read() );
+        if (BAUD_RATE > 2400)
+        {
+            DoFlowControl();
+        }
+        C64Serial.write( wifly.read() );
     }
 
     while (C64Serial.available() > 0)
     {
-      wifly.write( C64Serial.read() );
+        wifly.write( C64Serial.read() );
     }
 
     // Alternate check for open/closed state
@@ -391,72 +464,45 @@ void RawTerminalMode()
   bool changed=false;
   long rnxv_chars=0;
   long c64_chars=0;
+  long c64_rts = 0;
 
   C64Serial.println(F("*** Terminal Mode (Debug) ***"));
 
   while (true)
   {
-		while (wifly.available() > 0)
-		{
-			rnxv_chars++;
-			C64Serial.write( wifly.read() );
-			changed=true;
-		}
+      while (wifly.available() > 0)
+      {
+          rnxv_chars++;
 
-		while (C64Serial.available() > 0)
-		{
-			c64_chars++;
-			wifly.write( C64Serial.read() );
-			changed=true;
-		}
-    
-		if (changed)
-		{  
-			sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
-			Display(temp);
-		}
-  }
-}
+          if (BAUD_RATE > 2400)
+          {
+              DoFlowControl();
+          }
 
-// Raw Terminal Mode.  There is no escape.
-void RawTerminalModeFlowControl()
-{
-	bool changed = false;
-	long rnxv_chars = 0;
-	long c64_chars = 0;
-    long c64_rts = 0;
+          C64Serial.write(wifly.read());
+          changed = true;
+      }
 
-	C64Serial.println(F("*** Terminal Mode (Debug+Flow) ***"));
-	Display(F("Debug\nMode"));
+      while (C64Serial.available() > 0)
+      {
+          c64_chars++;
+          wifly.write(C64Serial.read());
+          changed = true;
+      }
 
-	while (true)
-	{
-	//	C64Serial.flush();   Goog says this is important, but it locks up C64 comms?
-
-		while (wifly.available() > 0)
-		{
-			rnxv_chars++;
-
-            doFl
-
-			C64Serial.write(wifly.read()); 
-
-			changed = true;
-		}       
-
-		while (C64Serial.available() > 0)
-		{            
-            c64_chars++;
-			wifly.write(C64Serial.read());
-			changed = true;
-		}
-
-        if (true) // changed)
-		{
-            sprintf(temp, "Wifi:%ld\n\nC64: %ld\n\nRTS: %ld", rnxv_chars, c64_chars, c64_rts);
-			Display(temp);
-		}
-	}
+      if (changed)
+      {
+          if (BAUD_RATE > 2400)
+          {
+              sprintf(temp, "Wifi:%ld\n\nC64: %ld\n\nRTS: %ld", rnxv_chars, c64_chars, c64_rts);
+          }
+          else
+          {
+              sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
+          }
+          Display(temp);
+      }
+   }
 }
 
 inline void DoFlowControl()
@@ -465,13 +511,14 @@ inline void DoFlowControl()
     while (digitalReadFast(C64_RTS) == LOW)   // If not...
     {
         digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi and wait
-    };
+    }
     digitalWriteFast(WIFI_CTS, LOW);
 }
 
+
 void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host
 {
-  int inpint, verbint, optint;                         //    telnet parameters as integers
+  int inpint, verbint, optint;        //    telnet parameters as integers
 
   // Wait for first character
   inpint = PeekByte(wifly);
@@ -492,12 +539,12 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
 
     if (inpint != IAC)
     {
-      return;   // Let Terminal mode handle character
+       return;   // Let Terminal mode handle character
     }
 
     inpint = ReadByte(wifly);    // Eat IAC character
     verbint = ReadByte(wifly);   // receive negotiation verb character
-    if (verbint == - 1) continue;                //          if negotiation verb character is nothing break the routine  (should never happen)
+    if (verbint == -1) continue;                //          if negotiation verb character is nothing break the routine  (should never happen)
 
     switch (verbint) {                             //          evaluate negotiation verb character
       case IAC:                                    //          if negotiation verb character is 255 (restart negotiation)

@@ -214,7 +214,7 @@ void QuantumLinkReloaded()
     Open("qlink.lyonlabs.org", 5190);
 
 }
-
+/*
 hostname = ;
 port = 5190;
 
@@ -225,6 +225,7 @@ Serial.end();
 
 //Change the arduino's baud rate.
 Serial.begin(115200);
+*/
 
 
 
