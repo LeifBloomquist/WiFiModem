@@ -88,18 +88,16 @@ void setup()
       C64Serial.println(F("Wi-Fi Failed!"));
       RawTerminalMode();
   }
-}
 
-void loop()
-{
   C64Serial.println();
   C64Serial.println(F("Commodore Wi-Fi Modem"));
   C64Serial.print(F("Serial #031 for "));
   C64Serial.println(F("Marcus Honey"));
-  ShowInfo();
+  ShowInfo(true);
+}
 
-  while (true)
-  {
+void loop()
+{
     Display(F("READY."));
 
     C64Serial.println();
@@ -115,23 +113,22 @@ void loop()
     switch (option)
     {
         case '1': doTelnet();
-            return;
+            break;
 
         case '2': Incoming();
-            return;
+            break;
       
         case '3': Configuration();
-            continue;
+            break;;
 
         case '\n': 
         case '\r':
         case ' ':
-            continue;
+            break;
 
         default: C64Serial.println(F("Unknown option, try again"));
-            continue;
+            break;
     }
-  }
 }
 
 void Configuration()
@@ -153,7 +150,7 @@ void Configuration()
 
         switch (option)
         {
-            case '1': ShowInfo();
+            case '1': ShowInfo(false);
                 break;
 
             case '2': ChangeSSID();
@@ -236,11 +233,12 @@ void ChangeSSID()
         C64Serial.println();
         C64Serial.print(F("SSID:"));
         input = GetInput();
-        boolean ok = wifly.setSSID(input.c_str());
+        boolean ok = !wifly.setSSID(input.c_str());   // Note inverted, not sure why this has to be
 
         if (ok)
         {
             C64Serial.println(F("SSID Successfully changed"));
+            wifly.save();
             wifly.reboot();
             return;
         }
@@ -349,7 +347,7 @@ String GetInput_Raw()
 
 // ----------------------------------------------------------
 
-void ShowInfo()
+void ShowInfo(boolean powerup)
 {
   char mac[20];
   char ip[20];
@@ -358,15 +356,28 @@ void ShowInfo()
   wifly.getMAC(mac, 20);
   wifly.getIP(ip, 20);
   wifly.getSSID(ssid, 20);
-
-  char temp[50]; 
-  sprintf(temp, "IP Address \n%s", ip);
-  Display(temp);
   
   C64Serial.println();
   C64Serial.print(F("MAC Address: "));   C64Serial.println(mac);
   C64Serial.print(F("IP Address:  "));   C64Serial.println(ip);
   C64Serial.print(F("Wi-Fi SSID:  "));   C64Serial.println(ssid);
+
+  if (powerup)
+  {
+      char temp[50];
+
+      sprintf(temp, "Baud Rate\n\n%d", BAUD_RATE);      
+      Display(temp);
+      delay(1000);
+      
+      sprintf(temp, "IP Address \n%s", ip);      
+      Display(temp);
+      delay(1000);
+
+      sprintf(temp, "SSID \n\n%s", ssid);
+      Display(temp);
+      delay(1000);
+  }
 }
 
 void Incoming()
