@@ -89,10 +89,10 @@ void setup()
       RawTerminalMode();
   }
 
+  wifly.close();
+
   C64Serial.println();
   C64Serial.println(F("Commodore Wi-Fi Modem"));
-  C64Serial.print(F("Serial #031 for "));
-  C64Serial.println(F("Marcus Honey"));
   ShowInfo(true);
 }
 
@@ -395,6 +395,8 @@ void Incoming()
     {
         localport = strport.toInt();
         wifly.setPort(localport);
+        wifly.save();
+        wifly.reboot();
     }
 
     localport = wifly.getPort();
