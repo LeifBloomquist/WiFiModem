@@ -432,11 +432,12 @@ void Telnet(String host, int port)
   }
   else
   {
-    DisplayBoth(F("Connect \nFailed!"));
-    return;
+      Display(F("Connect\nFailed!"));
+      C64Serial.println(F("Connect Failed!"));
+      return;
   }
 
-  CheckTelnet();
+  //CheckTelnet();
   TerminalMode();
 }
 
@@ -455,16 +456,16 @@ void TerminalMode()
         C64Serial.write( wifly.read() );
     }
 
-    while (C64Serial.available() > 0)
-    {
-        wifly.write( C64Serial.read() );
-    }
+        while (C64Serial.available() > 0)
+        {
+            wifly.write( C64Serial.read() );
+        }
 
-    // Alternate check for open/closed state
-    if (!wifly.isConnected())
-    {
-      break;
-    }
+        // Alternate check for open/closed state
+        if (!wifly.isConnected())
+        {
+            break;
+        }
   }
 
   wifly.close();
@@ -535,6 +536,7 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
 
   // Wait for first character
   inpint = PeekByte(wifly);
+
   if (inpint != IAC)
   {
     C64Serial.println(F("Raw TCP Connection Detected"));
