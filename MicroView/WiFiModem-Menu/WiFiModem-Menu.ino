@@ -49,9 +49,6 @@ int lastPort = 23;
 // PETSCII state
 boolean petscii_mode = false;
 
-// Temporary variables
-char temp[100];
-
 // ----------------------------------------------------------
 
 void setup()
@@ -280,8 +277,9 @@ void Display(String message)
 
 void DisplayBoth(String message)
 {
-    Display(message.replace(' ', '\n');
     C64Println(message);
+    message.replace(' ', '\n');
+    Display(message);   
 }
 
 // Wrapper that always prints correctly for ASCII/PETSCII
@@ -311,7 +309,8 @@ void C64Println()
 
 void ShowPETSCIIMode()
 {
-    char message[] = {
+    char message[] = 
+    {
         petscii::CG_RED, 'p',
         petscii::CG_ORG, 'e',
         petscii::CG_YEL, 't',
@@ -339,7 +338,7 @@ void doTelnet()
     if (hostName.length() > 0)
     {
         C64Print(F("\nPort ("));
-        C64Serial.println(lastPort);
+        C64Serial.print(lastPort);
         C64Print(F("): "));
 
         String strport = GetInput();
@@ -376,13 +375,20 @@ String GetInput()
 {
     String temp = GetInput_Raw();
     temp.trim();
+
+    if (petscii_mode)  // Input came in PETSCII form
+    {
+        return petscii::ToASCII(temp.c_str());
+    }
+
     return temp;
 }
 
 String GetInput_Raw()
 {
-  char in_char[100];
-  int max_length = sizeof(in_char);
+  char temp[50];
+
+  int max_length = sizeof(temp);
 
   int i = 0; // Input buffer pointer
   char key;
@@ -390,15 +396,15 @@ String GetInput_Raw()
   while (true)
   {
     key = ReadByte(C64Serial); // Read in one character
-    in_char[i] = key;
+    temp[i] = key;
     C64Serial.write(key); // Echo key press back to the user.
 
     if ((key == '\b') && (i > 0)) i -= 2; // Handles back space.
 
-    if (((int)key == 13) || (i == max_length - 1))
-    { // The \n represents enter key.
-      in_char[i] = 0; // Terminate the string with 0.
-      return String(in_char);
+    if (((int)key == 13) || (i == max_length - 1))   // The \n represents enter key.
+    { 
+        temp[i] = 0; // Terminate the string with 0.
+        return String(temp);
     }
     i++;
     if (i < 0) i = 0;
@@ -424,8 +430,6 @@ void ShowInfo(boolean powerup)
 
   if (powerup)
   {
-   //   C64Print(F("Firmware:    "));    C64Println(VERSION); // !!!!
-
       char temp[50];
 
       sprintf(temp, "Firmware\n\n%s", VERSION);
@@ -436,11 +440,11 @@ void ShowInfo(boolean powerup)
       Display(temp);
       delay(1000);
       
-      sprintf(temp, "IP Address \n%s", ip);      
+      sprintf(temp, "IP Address\n\n%s", ip);      
       Display(temp);
       delay(1000);
 
-      sprintf(temp, "SSID \n\n%s", ssid);
+      sprintf(temp, "SSID\n\n%s", ssid);
       Display(temp);
       delay(1000);
   }
@@ -452,7 +456,7 @@ void Incoming()
 
     C64Println();
     C64Print(F("Incoming port ("));
-    C64Serial.println(localport);
+    C64Serial.print(localport);
     C64Print(F("): "));
    
     String strport = GetInput();
@@ -468,7 +472,7 @@ void Incoming()
     localport = wifly.getPort();
     
     C64Println();
-    C64Print(F("Waiting for connections on port "));
+    C64Print(F("Waiting for connection on port "));
     C64Serial.println(localport);
   
     // Idle here until connected
@@ -484,27 +488,27 @@ void Incoming()
 
 void Telnet(String host, int port)
 {
-  sprintf(temp, "\nConnecting to %s", host.c_str() );
-  DisplayBoth(temp);
-
-  wifly.setIpProtocol(WIFLY_PROTOCOL_TCP);
-
-  boolean ok = wifly.open(host.c_str(), port);
-
-  if (ok)
-  {
-    sprintf(temp, "Connected to %s", host.c_str() );
+    char temp[50];
+    sprintf(temp, "\nConnecting to %s", host.c_str() );
     DisplayBoth(temp);
-  }
-  else
-  {
-      Display(F("Connect\nFailed!"));
-      C64Println(F("Connect Failed!"));
-      return;
-  }
 
-  CheckTelnet();
-  TerminalMode();
+    wifly.setIpProtocol(WIFLY_PROTOCOL_TCP);
+
+    boolean ok = wifly.open(host.c_str(), port);
+
+    if (ok)
+    {
+        sprintf(temp, "Connected to %s", host.c_str() );
+        DisplayBoth(temp);
+    }
+    else
+    {
+        DisplayBoth(F("Connect Failed!"));
+        return;
+    }
+
+    CheckTelnet();
+    TerminalMode();
 }
 
 void TerminalMode()
@@ -522,16 +526,16 @@ void TerminalMode()
         C64Serial.write( wifly.read() );
     }
 
-        while (C64Serial.available() > 0)
-        {
-            wifly.write( C64Serial.read() );
-        }
+    while (C64Serial.available() > 0)
+    {
+        wifly.write( C64Serial.read() );
+    }
 
-        // Alternate check for open/closed state
-        if (!wifly.isConnected())
-        {
-            break;
-        }
+    // Alternate check for open/closed state
+    if (!wifly.isConnected())
+    {
+        break;
+    }
   }
 
   wifly.close();
@@ -541,47 +545,49 @@ void TerminalMode()
 // Raw Terminal Mode.  There is no escape.
 void RawTerminalMode()
 {
-  bool changed=false;
-  long rnxv_chars=0;
-  long c64_chars=0;
-  long c64_rts = 0;
+    char temp[50];
 
-   C64Println(F("*** Terminal Mode (Debug) ***"));
+    bool changed=false;
+    long rnxv_chars=0;
+    long c64_chars=0;
+    long c64_rts = 0;
 
-  while (true)
-  {
-      while (wifly.available() > 0)
-      {
-          rnxv_chars++;
+    C64Println(F("*** Terminal Mode (Debug) ***"));
 
-          if (BAUD_RATE > 2400)
-          {
-              DoFlowControl();
-          }
+    while (true)
+    {
+        while (wifly.available() > 0)
+        {
+            rnxv_chars++;
 
-          C64Serial.write(wifly.read());
-          changed = true;
-      }
+            if (BAUD_RATE > 2400)
+            {
+                DoFlowControl();
+            }
 
-      while (C64Serial.available() > 0)
-      {
-          c64_chars++;
-          wifly.write(C64Serial.read());
-          changed = true;
-      }
+            C64Serial.write(wifly.read());
+            changed = true;
+        }
 
-      if (changed)
-      {
-          if (BAUD_RATE > 2400)
-          {
-              sprintf(temp, "Wifi:%ld\n\nC64: %ld\n\nRTS: %ld", rnxv_chars, c64_chars, c64_rts);
-          }
-          else
-          {
-              sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
-          }
-          Display(temp);
-      }
+        while (C64Serial.available() > 0)
+        {
+            c64_chars++;
+            wifly.write(C64Serial.read());
+            changed = true;
+        }
+
+        if (changed)
+        {
+            if (BAUD_RATE > 2400)
+            {
+                sprintf(temp, "Wifi:%ld\n\nC64: %ld\n\nRTS: %ld", rnxv_chars, c64_chars, c64_rts);
+            }
+            else
+            {
+                sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
+            }
+            Display(temp);
+        }
    }
 }
 
@@ -605,11 +611,8 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
 
   if (inpint != IAC)
   {
-     C64Println(F("Raw TCP Connection Detected")); // !!!! Debug
     return;   // Not a telnet session
   }
-
-   C64Println(F("Telnet Connection Detected"));  // !!!! Debug
 
   // IAC handling
   SendTelnetParameters();    // Start off with negotiating
@@ -679,11 +682,11 @@ void SendTelnetParameters()
 
 int ReadByte(Stream& in)
 {
-  while (in.available() == 0) {}
-  return in.read();
+    while (in.available() == 0) {}
+    return in.read();
 }
 
-// Peek at next byte.  Returns byte (as a int, via Sream::peek()) or -1 if timed out
+// Peek at next byte.  Returns byte (as a int, via Stream::peek()) or -1 if timed out
 
 int PeekByte(Stream& in, unsigned int timeout)
 {
