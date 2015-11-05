@@ -78,7 +78,11 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="petscii.h" />
     <ClInclude Include="__vm\.WiFiModem-Menu.vsarduino.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="petscii.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

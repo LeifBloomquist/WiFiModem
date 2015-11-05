@@ -84,4 +84,6 @@ extern "C" void __cxa_pure_virtual() {;}
 #define portInputRegister(P)
 #define portModeRegister(P)
 #include <WiFiModem-Menu.ino>
+#include <petscii.cpp>
+#include <petscii.h>
 #endif

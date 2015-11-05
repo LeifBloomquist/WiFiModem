@@ -10,12 +10,15 @@
 #include <WiFlyHQ.h>
 #include <EEPROM.h>
 #include <digitalWriteFast.h>
+#include "petscii.h"
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define BAUD_RATE 2400
+#define VERSION "0.01"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.  -------------------------------------
+
+#define BAUD_RATE 2400
 
 // Wifi
 // RxD is D0  (Hardware Serial)
@@ -40,13 +43,16 @@ WiFly wifly;
 
 // Telnet Stuff
 #define IAC 255
-
 String lastHost = "";
 int lastPort = 23;
 
-// ----------------------------------------------------------
+// PETSCII state
+boolean petscii_mode = false;
 
+// Temporary variables
 char temp[100];
+
+// ----------------------------------------------------------
 
 void setup()
 {
@@ -72,27 +78,24 @@ void setup()
       digitalWriteFast(C64_CTS, HIGH);
   }
 
-  Display(F("Wi-Fi\nInit..."));
-  C64Serial.println(F("Wi-Fi Init..."));
+  DisplayBoth(F("Wi-Fi Init..."));
 
   boolean ok = wifly.begin(&WifiSerial, &C64Serial);
 
   if (ok)
   {
-      Display(F("Wi-Fi\nOK!"));
-      C64Serial.println(F("Wi-Fi OK!"));
+      DisplayBoth(F("Wi-Fi OK!"));
   }
   else
   {
-      Display(F("Wi-Fi\nFailed!"));
-      C64Serial.println(F("Wi-Fi Failed!"));
+      DisplayBoth(F("Wi-Fi Failed!"));
       RawTerminalMode();
   }
 
   wifly.close();
 
-  C64Serial.println();
-  C64Serial.println(F("Commodore Wi-Fi Modem"));
+  C64Println();
+  C64Println(F("Commodore Wi-Fi Modem"));
   ShowInfo(true);
 }
 
@@ -100,33 +103,47 @@ void loop()
 {
     Display(F("READY."));
 
-    C64Serial.println();
-    C64Serial.println(F("1. Telnet to host or BBS"));
-    C64Serial.println(F("2. Wait for incoming connection"));
-    C64Serial.println(F("3. Configuration"));
-    C64Serial.println();
-    C64Serial.print(F("Select:"));      
+    C64Println();
+    C64Println(F("1. Telnet to host or BBS"));
+    C64Println(F("2. Wait for incoming connection"));
+    C64Println(F("3. Configuration"));
+    C64Println();
+    C64Print(F("Select: "));      
 
     int option = ReadByte(C64Serial);
     C64Serial.println((char)option);
       
     switch (option)
     {
-        case '1': doTelnet();
+        case '1': 
+            doTelnet();
             break;
 
-        case '2': Incoming();
+        case '2': 
+            Incoming();
             break;
       
-        case '3': Configuration();
-            break;;
+        case '3': 
+            Configuration();
+            break;
 
         case '\n': 
         case '\r':
         case ' ':
             break;
 
-        default: C64Serial.println(F("Unknown option, try again"));
+        case 8:
+            petscii_mode = false;
+            C64Println(F("ASCII Mode"));
+            break;
+             
+        case 20:
+            petscii_mode = true;
+            ShowPETSCIIMode();            
+            break;
+
+        default: 
+            C64Println(F("Unknown option, try again"));
             break;
     }
 }
@@ -135,15 +152,15 @@ void Configuration()
 {
     while (true)
     {
-        C64Serial.println();
-        C64Serial.println(F("Configuration Menu"));
-        C64Serial.println();
-        C64Serial.println(F("1. Display Current Configuration"));
-        C64Serial.println(F("2. Change SSID"));
-        C64Serial.println(F("3. Direct Terminal Mode (Debug)"));
-        C64Serial.println(F("4. Main Menu"));
-        C64Serial.println();
-        C64Serial.print(F("Select:"));
+        C64Println();
+        C64Println(F("Configuration Menu"));
+        C64Println();
+        C64Println(F("1. Display Current Configuration"));
+        C64Println(F("2. Change SSID"));
+        C64Println(F("3. Direct Terminal Mode (Debug)"));
+        C64Println(F("4. Main Menu"));
+        C64Println();
+        C64Print(F("Select: "));
 
         int option = ReadByte(C64Serial);
         C64Serial.println((char)option);
@@ -166,7 +183,7 @@ void Configuration()
             case ' ':
                 continue;
 
-            default: C64Serial.println(F("Unknown option, try again"));
+            default: C64Println(F("Unknown option, try again"));
                 continue;
         }
     }
@@ -178,14 +195,14 @@ void ChangeSSID()
 
     while (true)
     {
-        C64Serial.println();
-        C64Serial.println(F("Change SSID"));
-        C64Serial.println();
-        C64Serial.println(F("1. WEP"));
-        C64Serial.println(F("2. WPA / WPA2"));
-        C64Serial.println(F("3. Return to Configuration Menu"));
-        C64Serial.println();
-        C64Serial.print(F("Select:"));
+        C64Println();
+        C64Println(F("Change SSID"));
+        C64Println();
+        C64Println(F("1. WEP"));
+        C64Println(F("2. WPA / WPA2"));
+        C64Println(F("3. Return to Configuration Menu"));
+        C64Println();
+        C64Print(F("Select: "));
 
         int option = ReadByte(C64Serial);
         C64Serial.println((char)option);
@@ -205,23 +222,23 @@ void ChangeSSID()
         case ' ':
             continue;
 
-        default: C64Serial.println(F("Unknown option, try again"));
+        default: C64Println(F("Unknown option, try again"));
             continue;
         }
 
-        C64Serial.println();
+        C64Println();
         String input;
         
         switch (mode)
         {
             case WIFLY_MODE_WEP:
-                C64Serial.print(F("Key:"));
+                C64Print(F("Key:"));
                 input = GetInput();
                 wifly.setKey(input.c_str());
                 break;
 
             case WIFLY_MODE_WPA:
-                C64Serial.print(F("Passphrase:"));
+                C64Print(F("Passphrase:"));
                 input = GetInput();
                 wifly.setPassphrase(input.c_str());
                 break;
@@ -230,21 +247,21 @@ void ChangeSSID()
                 continue;
         }
         
-        C64Serial.println();
-        C64Serial.print(F("SSID:"));
+        C64Println();
+        C64Print(F("SSID:"));
         input = GetInput();
         boolean ok = !wifly.setSSID(input.c_str());   // Note inverted, not sure why this has to be
 
         if (ok)
         {
-            C64Serial.println(F("SSID Successfully changed"));
+            C64Println(F("SSID Successfully changed"));
             wifly.save();
             wifly.reboot();
             return;
         }
         else
         {
-            C64Serial.println(F("Error Setting SSID"));
+            C64Println(F("Error Setting SSID"));
             continue;
         }        
     }
@@ -263,9 +280,52 @@ void Display(String message)
 
 void DisplayBoth(String message)
 {
-  Display(message);
-  C64Serial.println(message);
+    Display(message.replace(' ', '\n');
+    C64Println(message);
 }
+
+// Wrapper that always prints correctly for ASCII/PETSCII
+void C64Print(String message)
+{
+    if (petscii_mode)
+    {
+        C64Serial.print(petscii::ToPETSCII(message.c_str()));
+    }
+    else
+    {
+        C64Serial.print(message);
+    }
+}
+
+// Wrapper that always prints correctly for ASCII/PETSCII
+void C64Println(String message)
+{
+    C64Print(message);
+    C64Serial.println();
+}
+
+void C64Println()
+{
+    C64Serial.println();
+}
+
+void ShowPETSCIIMode()
+{
+    char message[] = {
+        petscii::CG_RED, 'p',
+        petscii::CG_ORG, 'e',
+        petscii::CG_YEL, 't',
+        petscii::CG_GRN, 's',
+        petscii::CG_LBL, 'c',
+        petscii::CG_CYN, 'i',
+        petscii::CG_PUR, 'i',
+        petscii::CG_WHT, ' ', 'm', 'O', 'D', 'E', '!', 
+        petscii::CG_GR3, '\0' 
+    };
+    
+    C64Serial.println(message);
+}
+
 
 // ----------------------------------------------------------
 
@@ -273,14 +333,14 @@ void doTelnet()
 {
     int port = lastPort;
 
-    C64Serial.print(F("\nTelnet host: "));
+    C64Print(F("\nTelnet host: "));
     String hostName = GetInput();
 
     if (hostName.length() > 0)
     {
-        C64Serial.print(F("\nPort ("));
-        C64Serial.print(lastPort);
-        C64Serial.print(F("): "));
+        C64Print(F("\nPort ("));
+        C64Serial.println(lastPort);
+        C64Print(F("): "));
 
         String strport = GetInput();
 
@@ -357,14 +417,20 @@ void ShowInfo(boolean powerup)
   wifly.getIP(ip, 20);
   wifly.getSSID(ssid, 20);
   
-  C64Serial.println();
-  C64Serial.print(F("MAC Address: "));   C64Serial.println(mac);
-  C64Serial.print(F("IP Address:  "));   C64Serial.println(ip);
-  C64Serial.print(F("Wi-Fi SSID:  "));   C64Serial.println(ssid);
+  C64Println();
+  C64Print(F("MAC Address: "));    C64Println(mac);
+  C64Print(F("IP Address:  "));    C64Println(ip);
+  C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
 
   if (powerup)
   {
+   //   C64Print(F("Firmware:    "));    C64Println(VERSION); // !!!!
+
       char temp[50];
+
+      sprintf(temp, "Firmware\n\n%s", VERSION);
+      Display(temp);
+      delay(1000);
 
       sprintf(temp, "Baud Rate\n\n%d", BAUD_RATE);      
       Display(temp);
@@ -384,10 +450,10 @@ void Incoming()
 {
     int localport = wifly.getPort();
 
-    C64Serial.println();
-    C64Serial.print(F("Incoming port ("));
-    C64Serial.print(localport);
-    C64Serial.print(F("): "));
+    C64Println();
+    C64Print(F("Incoming port ("));
+    C64Serial.println(localport);
+    C64Print(F("): "));
    
     String strport = GetInput();
     
@@ -401,14 +467,14 @@ void Incoming()
 
     localport = wifly.getPort();
     
-    C64Serial.println();
-    C64Serial.print(F("Waiting for connections on port "));
+    C64Println();
+    C64Print(F("Waiting for connections on port "));
     C64Serial.println(localport);
   
     // Idle here until connected
     while (!wifly.isConnected())  {}
 
-    C64Serial.println(F("Incoming Connection")); 
+    C64Println(F("Incoming Connection")); 
  
     TerminalMode();
 }
@@ -433,17 +499,17 @@ void Telnet(String host, int port)
   else
   {
       Display(F("Connect\nFailed!"));
-      C64Serial.println(F("Connect Failed!"));
+      C64Println(F("Connect Failed!"));
       return;
   }
 
-  //CheckTelnet();
+  CheckTelnet();
   TerminalMode();
 }
 
 void TerminalMode()
 {
-  C64Serial.println(F("*** Terminal Mode ***"));
+  C64Println(F("*** Terminal Mode ***"));
 
   while (wifly.available() != -1) // -1 means closed
   {
@@ -480,7 +546,7 @@ void RawTerminalMode()
   long c64_chars=0;
   long c64_rts = 0;
 
-  C64Serial.println(F("*** Terminal Mode (Debug) ***"));
+   C64Println(F("*** Terminal Mode (Debug) ***"));
 
   while (true)
   {
@@ -534,23 +600,23 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
 {
   int inpint, verbint, optint;        //    telnet parameters as integers
 
-  // Wait for first character
-  inpint = PeekByte(wifly);
+  // Wait for first character for 5 seconds
+  inpint = PeekByte(wifly, 5000);
 
   if (inpint != IAC)
   {
-    C64Serial.println(F("Raw TCP Connection Detected"));
+     C64Println(F("Raw TCP Connection Detected")); // !!!! Debug
     return;   // Not a telnet session
   }
 
-  C64Serial.println(F("Telnet Connection Detected"));
+   C64Println(F("Telnet Connection Detected"));  // !!!! Debug
 
   // IAC handling
   SendTelnetParameters();    // Start off with negotiating
 
   while (true)
   {
-    inpint = PeekByte(wifly);       //      peek at next character
+    inpint = PeekByte(wifly, 1000);       // peek at next character, timeout after 1 second
 
     if (inpint != IAC)
     {
@@ -617,8 +683,18 @@ int ReadByte(Stream& in)
   return in.read();
 }
 
-int PeekByte(Stream& in)
+// Peek at next byte.  Returns byte (as a int, via Sream::peek()) or -1 if timed out
+
+int PeekByte(Stream& in, unsigned int timeout)
 {
-  while (in.available() == 0) {}
+  elapsedMillis timeElapsed = 0;
+
+  while (in.available() == 0) 
+  {
+      if (timeElapsed > timeout)
+      {
+          return -1;
+      }
+  }
   return in.peek();
 }
