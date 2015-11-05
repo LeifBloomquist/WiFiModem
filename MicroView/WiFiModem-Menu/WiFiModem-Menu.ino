@@ -14,7 +14,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.01"
+#define VERSION "0.02"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.  -------------------------------------
 
@@ -46,8 +46,12 @@ WiFly wifly;
 String lastHost = "";
 int lastPort = 23;
 
+// EEPROM Addresses
+#define PETSCII_ADDR 0
+
 // PETSCII state
-boolean petscii_mode = false;
+boolean petscii_mode = EEPROM.read(PETSCII_ADDR);
+
 
 // ----------------------------------------------------------
 
@@ -101,6 +105,8 @@ void loop()
     Display(F("READY."));
 
     C64Println();
+    ShowPETSCIIMode();
+    C64Println();
     C64Println(F("1. Telnet to host or BBS"));
     C64Println(F("2. Wait for incoming connection"));
     C64Println(F("3. Configuration"));
@@ -131,12 +137,12 @@ void loop()
 
         case 8:
             petscii_mode = false;
-            C64Println(F("ASCII Mode"));
+            EEPROM.write(PETSCII_ADDR, petscii_mode);
             break;
              
         case 20:
             petscii_mode = true;
-            ShowPETSCIIMode();            
+            EEPROM.write(PETSCII_ADDR, petscii_mode);
             break;
 
         default: 
@@ -309,20 +315,26 @@ void C64Println()
 
 void ShowPETSCIIMode()
 {
-    char message[] = 
+    if (petscii_mode)
     {
-        petscii::CG_RED, 'p',
-        petscii::CG_ORG, 'e',
-        petscii::CG_YEL, 't',
-        petscii::CG_GRN, 's',
-        petscii::CG_LBL, 'c',
-        petscii::CG_CYN, 'i',
-        petscii::CG_PUR, 'i',
-        petscii::CG_WHT, ' ', 'm', 'O', 'D', 'E', '!', 
-        petscii::CG_GR3, '\0' 
-    };
-    
-    C64Serial.println(message);
+        char message[] =
+        {
+            petscii::CG_RED, 'p',
+            petscii::CG_ORG, 'e',
+            petscii::CG_YEL, 't',
+            petscii::CG_GRN, 's',
+            petscii::CG_LBL, 'c',
+            petscii::CG_CYN, 'i',
+            petscii::CG_PUR, 'i',
+            petscii::CG_WHT, ' ', 'm', 'O', 'D', 'E', '!',
+            petscii::CG_GR3, '\0'
+        };
+        C64Serial.println(message);
+    }
+    else
+    {
+        C64Serial.println("ASCII Mode");
+    }  
 }
 
 
@@ -332,7 +344,9 @@ void doTelnet()
 {
     int port = lastPort;
 
-    C64Print(F("\nTelnet host: "));
+    C64Print(F("\nTelnet host ("));
+    C64Print(lastHost);
+    C64Print(F("): "));
     String hostName = GetInput();
 
     if (hostName.length() > 0)
