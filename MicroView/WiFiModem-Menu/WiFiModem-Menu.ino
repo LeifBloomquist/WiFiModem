@@ -430,6 +430,8 @@ void ShowInfo(boolean powerup)
 
   if (powerup)
   {
+      C64Print(F("Firmware:    "));    C64Println(VERSION);
+
       char temp[50];
 
       sprintf(temp, "Firmware\n\n%s", VERSION);
@@ -440,7 +442,7 @@ void ShowInfo(boolean powerup)
       Display(temp);
       delay(1000);
       
-      sprintf(temp, "IP Address\n\n%s", ip);      
+      sprintf(temp, "IP Address \n%s", ip);      
       Display(temp);
       delay(1000);
 

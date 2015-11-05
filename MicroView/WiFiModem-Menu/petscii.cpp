@@ -52,7 +52,9 @@ String petscii::ToPETSCII(const char *source)
 
     for (int i = 0; source[i] != 0; i++)
     {
-        temp += ascToPetTable[source[i]];
+        //temp += ascToPetTable[source[i]];
+        temp += (char)pgm_read_byte(&ascToPetTable[source[i]]);
+        
     }
     return temp;
 }
@@ -64,7 +66,8 @@ String petscii::ToASCII(const char *source)
 
     for (int i = 0; source[i] != 0; i++)
     {
-        temp += petToAscTable[source[i]];
+        //temp += petToAscTable[source[i]];
+        temp += (char)pgm_read_byte(&petToAscTable[source[i]]);
     }
     return temp;
 }
