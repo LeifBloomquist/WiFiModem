@@ -78,10 +78,12 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\hayesduino\ModemBase.h" />
     <ClInclude Include="petscii.h" />
     <ClInclude Include="__vm\.WiFiModem-Menu.vsarduino.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\hayesduino\ModemBase.cpp" />
     <ClCompile Include="petscii.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

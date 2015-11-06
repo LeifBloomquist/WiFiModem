@@ -10,6 +10,7 @@
 #include <WiFlyHQ.h>
 #include <EEPROM.h>
 #include <digitalWriteFast.h>
+#include "ModemBase.h"
 #include "petscii.h"
 
 ;  // Keep this here to pacify the Arduino pre-processor
