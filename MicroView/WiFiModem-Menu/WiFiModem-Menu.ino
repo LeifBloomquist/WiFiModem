@@ -372,12 +372,15 @@ void ShowPETSCIIMode()
             petscii::CG_WHT, ' ', 'm', 'O', 'D', 'E', '!',
             petscii::CG_GR3, '\0'
         };
-        C64Serial.println(message);
+        C64Serial.print(message);
+      
     }
     else
     {
-        C64Serial.println("ASCII Mode");
+        C64Serial.print("ASCII Mode");
     }
+
+    C64Println(F(" (Del to switch)"));
 }
 
 void SetPETSCIIMode(boolean mode)
@@ -756,7 +759,7 @@ int ReadByte(Stream& in)
     return in.read();
 }
 
-// Peek at next byte.  Returns byte (as a int, via Stream::peek()) or -1 if timed out
+// Peek at next byte.  Returns byte (as a int, via Stream::peek()) or TIMEDOUT (-1) if timed out
 
 int PeekByte(Stream& in, unsigned int timeout)
 {
@@ -782,7 +785,7 @@ void ConfigureAutoStart()
         C64Println();
         C64Print(F("Autostart Menu (Current: "));
         C64Serial.print(autostart_mode);
-        C64Print(F(")"));
+        C64Println(F(")"));
         C64Println();
         C64Println(F("0. Clear Autostart Options"));
         C64Println(F("1. Hayes Emulation Mode"));
@@ -829,6 +832,7 @@ void ConfigureAutoStart()
         }
 
         EEPROM.write(ADDR_AUTOSTART, autostart_mode);  // Save
+        C64Println(F("Saved"));
     }
 }
 
@@ -838,61 +842,64 @@ void HandleAutoStart()
 
     switch (autostart_mode)
     {
-    case AUTO_NONE:  // No Autostart, continue as normal
-        return;
+        case AUTO_NONE:  // No Autostart, continue as normal
+            return;
 
-    case AUTO_HAYES: // Hayes Emulation
-        C64Println(F("Entering Hayes Emulation Mode"));
-        break;
+        case AUTO_HAYES: // Hayes Emulation
+            C64Println(F("Entering Hayes Emulation Mode"));
+            break;
 
-    case AUTO_CSERVER: // Hayes Emulation
-        C64Println(F("Connecting to CommodoreServer"));
-        break;
+        case AUTO_CSERVER: // Hayes Emulation
+            C64Println(F("Connecting to CommodoreServer"));
+            break;
 
-    case AUTO_QLINK: // QuantumLink Reloaded
-        C64Println(F("Ready to Connect to QuantumLink Reloaded"));
-        C64Println(F("TODO: Not Implemented!"));  //  !!!! TODO
-        return;
+        case AUTO_QLINK: // QuantumLink Reloaded
+            C64Println(F("Ready to Connect to QuantumLink Reloaded"));
+            C64Println(F("TODO: Not Implemented!"));  //  !!!! TODO
+            return;
 
-    default: // Invalid - on first startup or if corrupted.  Clear silently and continue to menu.
-        EEPROM.write(ADDR_AUTOSTART, AUTO_NONE);
-        autostart_mode = AUTO_NONE;
-        return;
+        default: // Invalid - on first startup or if corrupted.  Clear silently and continue to menu.
+            EEPROM.write(ADDR_AUTOSTART, AUTO_NONE);
+            autostart_mode = AUTO_NONE;
+            return;
     }
 
     // Wait for user to cancel
 
-    C64Println(F("Press any key within 5 seconds to cancel"));
+    C64Println(F("Press any key to cancel..."));
     C64Println();
 
     int option = PeekByte(C64Serial, 5000);
-    ReadByte(C64Serial);    // eat character
 
-    if (option != TIMEDOUT) return;  // Key pressed
+    if (option != TIMEDOUT)   // Key pressed
+    {
+        ReadByte(C64Serial);    // eat character
+        return;
+    }
 
     // Take the chosen action
 
     switch (autostart_mode)
     {
-    case AUTO_HAYES: // Hayes Emulation
-        C64Println(F("Entering Hayes Emulation Mode"));
-        HayesEmulationMode();
-        break;
+        case AUTO_HAYES: // Hayes Emulation
+            C64Println(F("Entering Hayes Emulation Mode"));
+            HayesEmulationMode();
+            break;
 
-    case AUTO_CSERVER: // CommodoreServer - just connect repeatedly
-        while (true)
-        {
-            Connect("www.commodoreserver.com", 1541, true);
-            delay(1000);
-        }
-        break;
+        case AUTO_CSERVER: // CommodoreServer - just connect repeatedly
+            while (true)
+            {
+                Connect("www.commodoreserver.com", 1541, true);
+                delay(1000);
+            }
+            break;
 
-    case AUTO_QLINK: // QuantumLink Reloaded
-        // !!!! Not 100% sure what to do here.  Need 1200 baud.
-        return;   // !!!!
+        case AUTO_QLINK: // QuantumLink Reloaded
+            // !!!! Not 100% sure what to do here.  Need 1200 baud.
+            return;   // !!!!
 
-    default: // Shouldn't ever reach here.  Just continue to menu if so.
-        return;
+        default: // Shouldn't ever reach here.  Just continue to menu if so.
+            return;
     }
 }
 
@@ -912,12 +919,12 @@ void HayesEmulationMode()
 
 inline void PrintOK()
 {
-    C64Print(F("OK"));
+    DisplayBoth(F("OK"));
 }
 
 inline void PrintERROR()
 {
-    C64Print(F("ERROR"));
+    DisplayBoth(F("ERROR"));
 }
 
 // EOF!

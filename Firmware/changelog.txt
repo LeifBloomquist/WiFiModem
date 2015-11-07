@@ -1,0 +1,22 @@
+
+Version 0.002 - WiFiModem-Menu-002.hex
+----------------------------------------
+
+Extended PETSCII Support - all menus detect backspace to switch
+ASCII/PETSCII saved in EPROM
+Autostart menu and functionality
+Code cleanup 
+Hayes Emulation started (not functional yet)
+
+
+Version 0.001 - WiFiModem-Menu-001.hex
+----------------------------------------
+
+PETSCII Support
+Fixed deadlock bug with CommodoreServer
+
+
+Initial version - WiFiModem-Menu-000.hex
+----------------------------------------
+
+Very basic menu with Telnet
