@@ -1,7 +1,7 @@
 /*
-    Commodore 64 - MicroView - Wi - fi Cart
-    Simple Menu Sketch
-    Leif Bloomquist
+    Commodore 64 - MicroView - Wi-Fi Cart
+    Author: Leif Bloomquist
+    With assistance and code from Greg Alekel, Payton Byrd, Craig Bruce
 */
 
 #include <MicroView.h>
@@ -14,8 +14,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.02"
-
+#define VERSION "0.03"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -53,6 +52,7 @@ int lastPort = 23;
 // EEPROM Addresses
 #define ADDR_PETSCII       0
 #define ADDR_AUTOSTART     1
+#define ADDR_MODEM_ECHO    10
 
 // PETSCII state
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
@@ -318,7 +318,7 @@ void ChangeSSID()
 void Display(String message)
 {
     uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
-        uView.setCursor(0, 0);
+    uView.setCursor(0, 0);
     uView.println(message);
     uView.display();
 }
@@ -392,6 +392,18 @@ void SetPETSCIIMode(boolean mode)
 // ----------------------------------------------------------
 // User Input Handling
 
+boolean IsBackSpace(char c)
+{
+    if ((c == 8) || (c == 20))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 String GetInput()
 {
     String temp = GetInput_Raw();
@@ -420,7 +432,9 @@ String GetInput_Raw()
         temp[i] = key;
         C64Serial.write(key); // Echo key press back to the user.
 
-        if ((key == '\b') && (i > 0)) i -= 2; // Handles back space.
+       // if ((key == '\b') && (i > 0)) i -= 2; // Handles back space.
+
+        if (IsBackSpace(key) && (i > 0)) i -= 2; // Handles back space.        
 
         if (((int)key == 13) || (i == max_length - 1))   // The 13 represents enter key.
         {
@@ -449,11 +463,10 @@ void ShowInfo(boolean powerup)
     C64Print(F("MAC Address: "));    C64Println(mac);
     C64Print(F("IP Address:  "));    C64Println(ip);
     C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
+    C64Print(F("Firmware:    "));    C64Println(VERSION);
 
     if (powerup)
     {
-        C64Print(F("Firmware:    "));    C64Println(VERSION);
-
         char temp[50];
 
         sprintf(temp, "Firmware\n\n%s", VERSION);
@@ -854,9 +867,8 @@ void HandleAutoStart()
             break;
 
         case AUTO_QLINK: // QuantumLink Reloaded
-            C64Println(F("Ready to Connect to QuantumLink Reloaded"));
-            C64Println(F("TODO: Not Implemented!"));  //  !!!! TODO
-            return;
+            C64Println(F("Ready to Connect to QuantumLink Reloaded"));          
+            break;
 
         default: // Invalid - on first startup or if corrupted.  Clear silently and continue to menu.
             EEPROM.write(ADDR_AUTOSTART, AUTO_NONE);
@@ -867,7 +879,6 @@ void HandleAutoStart()
     // Wait for user to cancel
 
     C64Println(F("Press any key to cancel..."));
-    C64Println();
 
     int option = PeekByte(C64Serial, 5000);
 
@@ -882,7 +893,6 @@ void HandleAutoStart()
     switch (autostart_mode)
     {
         case AUTO_HAYES: // Hayes Emulation
-            C64Println(F("Entering Hayes Emulation Mode"));
             HayesEmulationMode();
             break;
 
@@ -896,6 +906,7 @@ void HandleAutoStart()
 
         case AUTO_QLINK: // QuantumLink Reloaded
             // !!!! Not 100% sure what to do here.  Need 1200 baud.
+            C64Println(F("TODO: Not Implemented!"));  //  !!!! TODO
             return;   // !!!!
 
         default: // Shouldn't ever reach here.  Just continue to menu if so.
@@ -905,26 +916,610 @@ void HandleAutoStart()
 
 // ----------------------------------------------------------
 // Simple Hayes Emulation
+// Portions of this code are adapted from Payton Byrd's Hayesduino - thanks!
+
+boolean Modem_isCommandMode = true;
+boolean Modem_isConnected = false;
+boolean Modem_isRinging = false;
+boolean Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
+boolean Modem_VerboseResponses = true;
+boolean Modem_QuietMode = false;
+boolean Modem_isDcdInverted = false;
+
+boolean Modem_S0_AutoAnswer = false;
+char    Modem_S2_EscapeCharacter = '+';
+
+#define COMMAND_BUFFER_SIZE  81
+char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
+char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
+
+int Modem_EscapeCount = 0;
 
 void HayesEmulationMode()
 {
-    boolean command_mode = true;
+    pinModeFast(C64_RI, OUTPUT);
+    pinModeFast(C64_DSR, OUTPUT);
+    pinModeFast(C64_DTR, OUTPUT);
+    pinModeFast(C64_DCD, INPUT);
+    pinModeFast(C64_RTS, INPUT);
 
-    PrintOK();
+    digitalWriteFast(C64_RI, LOW);
+    digitalWriteFast(C64_DSR, HIGH);
+    digitalWriteFast(C64_DTR, Modem_ToggleCarrier(false));
 
-    // !!!!
+    Modem_EscapeCount = 0;
 
+    Modem_LoadDefaults();
+    Modem_ResetCommandBuffer();
 
-}
-
-inline void PrintOK()
-{
+    C64Println();
     DisplayBoth(F("OK"));
+
+    while (true)
+    {
+        Modem_Loop();
+    }
 }
 
-inline void PrintERROR()
+
+inline void Modem_PrintOK()
 {
-    DisplayBoth(F("ERROR"));
+    Modem_PrintResponse("0", F("OK"));
 }
+
+inline void Modem_PrintERROR()
+{
+    Modem_PrintResponse("4", F("ERROR"));
+}
+
+void Modem_PrintResponse(const char* code, const __FlashStringHelper * msg)
+{
+    C64Println();
+
+    if (Modem_VerboseResponses)
+        C64Println(msg);
+    else
+        C64Println(code);
+
+    // Always show verbose version on OLED, underneath command
+    uView.println();
+    uView.println(msg);
+    uView.display();
+}
+
+void Modem_ResetCommandBuffer()
+{
+    memset(Modem_CommandBuffer, 0, COMMAND_BUFFER_SIZE);
+}
+
+
+void Modem_LoadDefaults(void)
+{
+    Modem_isCommandMode = true;
+    Modem_isConnected = false;
+    Modem_isRinging = false;
+    Modem_SetEcho(true);
+    Modem_VerboseResponses = true;
+    Modem_QuietMode = false;
+    Modem_S0_AutoAnswer = false;
+    Modem_S2_EscapeCharacter = '+';
+    Modem_isDcdInverted = false;
+}
+
+
+int Modem_ToggleCarrier(boolean isHigh)
+{
+    int result = 0; //_isDcdInverted ? (isHigh ? LOW : HIGH) : (isHigh ? HIGH : LOW);
+    switch (Modem_isDcdInverted)
+    {
+    case 0: result = (int)(!isHigh); break;
+    case 1: result = (int)(isHigh); break;
+    case 2: result = LOW;
+    }
+   
+    return result;
+}
+
+void Modem_Disconnect()
+{
+    Modem_isCommandMode = true;
+    Modem_isConnected = false;
+    Modem_isRinging = false;    
+
+    wifly.close();
+
+    // TODO - According to http://totse2.net/totse/en/technology/telecommunications/trm.html
+    //		  The BBS should detect <CR><LF>NO CARRIER<CR><LF> as a dropped carrier sequences.
+    //		  DMBBS does not honor this and so I haven't sucessfully tested it, thus it's commented out.
+
+    // LB: Added back in for user feedback
+
+    delay(100);
+    DisplayBoth(F("NO CARRIER"));
+
+    digitalWriteFast(C64_RTS, LOW);
+    digitalWriteFast(C64_DTR, Modem_ToggleCarrier(false));
+}
+
+void Modem_SetEcho(boolean on)
+{
+    Modem_EchoOn = on;
+    EEPROM.write(ADDR_MODEM_ECHO, Modem_EchoOn);  // Save
+}
+
+
+// Validate and handle AT sequence  (A/ was handled already)
+void Modem_ProcessCommandBuffer()
+{
+    boolean petscii_mode_guess = false;
+    // Simple PETSCII/ASCII detection
+   
+    if (((Modem_CommandBuffer[0] == 'A') && (Modem_CommandBuffer[1] == 'T')))
+    {
+        petscii_mode_guess = true;
+    }
+    else if (((Modem_CommandBuffer[0] == 'a') && (Modem_CommandBuffer[1] == 't')))
+    {
+        petscii_mode_guess = false;
+    }
+    else
+    {
+        return;  // Not an AT command, ignore silently
+    }
+
+    // Only write to EEPROM if changed
+    if (petscii_mode_guess != petscii_mode)
+    {
+        SetPETSCIIMode(petscii_mode_guess);
+    }
+
+    // Force uppercase for consistency 
+
+    for (int i = 0; i < strlen(Modem_CommandBuffer); i++)
+    {
+        Modem_CommandBuffer[i] = toupper(Modem_CommandBuffer[i]);
+    }
+
+    Display(Modem_CommandBuffer);
+
+    // TODO: Handle concatenated command strings.  For now, process a aingle command.
+
+    if (strcmp(Modem_CommandBuffer, ("ATZ")) == 0)
+    {
+        Modem_LoadDefaults();
+        Modem_PrintOK();
+    }
+    else if (strcmp(Modem_CommandBuffer, ("ATI")) == 0)
+    {
+        ShowInfo(false);
+        Modem_PrintOK();
+    }
+    else if (strcmp(Modem_CommandBuffer, ("AT&F")) == 0)
+    {
+        if (strcmp(Modem_LastCommandBuffer, ("AT&F")) == 0)
+        {
+            Modem_LoadDefaults();
+            Modem_PrintOK();
+        }
+        else
+        {
+            C64Println(F("Send command again to verify")); 
+        }
+    }
+    else if (strcmp(Modem_CommandBuffer, ("ATA")) == 0)
+    {
+        Modem_Answer();    
+    }
+    else if (strcmp(Modem_CommandBuffer, ("ATD")) == 0 || strcmp(Modem_CommandBuffer, ("ATO")) == 0)
+    {
+        if (Modem_isConnected)
+        {
+            Modem_isCommandMode = false;
+        }
+        else
+        {
+            Modem_PrintERROR();
+        }
+    }
+    else if (   // This needs to be revisited
+        strncmp(Modem_CommandBuffer, ("ATDT "), 5) == 0 ||
+        strncmp(Modem_CommandBuffer, ("ATDP "), 5) == 0 ||
+        strncmp(Modem_CommandBuffer, ("ATD "), 4) == 0
+        )
+    {
+        Modem_Dialout(strstr(Modem_CommandBuffer, " ") + 1);
+        Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
+    }
+    else if (strncmp(Modem_CommandBuffer, ("ATDT"), 4) == 0)
+    {
+        Modem_Dialout(strstr(Modem_CommandBuffer, "ATDT") + 4);
+        Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
+    }
+    else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
+    {
+        Modem_Disconnect();
+    }
+    else if (strncmp(Modem_CommandBuffer, ("AT"), 2) == 0)
+    {
+        if (strstr(Modem_CommandBuffer, ("E0")) != NULL)
+        {
+            Modem_SetEcho(false);
+        }
+
+        if (strstr(Modem_CommandBuffer, ("E1")) != NULL)
+        {
+            Modem_EchoOn = true;
+        }
+
+        if (strstr(Modem_CommandBuffer, ("Q0")) != NULL)
+        {
+            Modem_VerboseResponses = false;
+            Modem_QuietMode = false;
+        }
+
+        if (strstr(Modem_CommandBuffer, ("Q1")) != NULL)
+        {
+            Modem_QuietMode = true;
+        }
+
+        if (strstr(Modem_CommandBuffer, ("V0")) != NULL)
+        {
+            Modem_VerboseResponses = false;
+        }
+
+        if (strstr(Modem_CommandBuffer, ("V1")) != NULL)
+        {
+            Modem_VerboseResponses = true;
+        }
+
+        if (strstr(Modem_CommandBuffer, ("X0")) != NULL)
+        {
+            // TODO
+        }
+        if (strstr(Modem_CommandBuffer, ("X1")) != NULL)
+        {
+            // TODO
+        }
+
+        char *currentS;
+        char temp[100];
+
+        int offset = 0;
+        if ((currentS = strstr(Modem_CommandBuffer, ("S0="))) != NULL)
+        {
+            offset = 3;
+            while (currentS[offset] != '\0' && isDigit(currentS[offset]))
+            {
+                offset++;
+            }
+
+            memset(temp, 0, 100);
+            strncpy(temp, currentS + 3, offset - 3);
+            Modem_S0_AutoAnswer = atoi(temp);
+        }
+
+        Modem_PrintOK();
+    }
+    else
+    {
+        Modem_PrintERROR();
+    }
+
+    strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);
+    Modem_ResetCommandBuffer();
+}
+
+void Modem_Ring()
+{
+    Modem_isRinging = true;
+
+    if (Modem_S0_AutoAnswer != 0)
+    {
+        Modem_Answer();
+    }
+    else
+    {
+        Modem_PrintResponse("2", F("RING"));
+
+        digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+
+        digitalWriteFast(C64_RI, HIGH);
+        delay(250);
+        digitalWriteFast(C64_RI, LOW);
+    }
+}
+
+void Modem_ConnectOut()
+{
+    C64Serial.print(F("CONNECT "));
+
+/*
+    if (_verboseResponses)
+    {
+        _serial->print(F("CONNECT "));
+    }
+
+    if (_baudRate == 38400)
+    {
+        Modem_PrintResponse("28", F("38400"));
+    }
+    else if (_baudRate == 19200)
+    {
+        printResponse("15", F("19200"));
+    }
+    else if (_baudRate == 14400)
+    {
+        printResponse("13", F("14400"));
+    }
+    else if (_baudRate == 9600)
+    {
+        printResponse("12", F("9600"));
+    }
+    else if (_baudRate == 4800)
+    {
+        printResponse("11", F("4800"));
+    }
+    else if (_baudRate == 2400)
+    {
+        printResponse("10", F("2400"));
+    }
+    else if (_baudRate == 1200)
+    {
+        printResponse("5", F("1200"));
+    }
+    else
+    {
+        if (!_verboseResponses)
+            _serial->println('1');
+        else
+        {
+            _serial->println(_baudRate);
+        }
+    }
+*/
+    digitalWriteFast(C64_DTR, Modem_ToggleCarrier(true));
+
+    Modem_isConnected = true;
+    Modem_isCommandMode = false;
+    Modem_isRinging = false;
+}
+
+void Modem_ProcessData()
+{
+    //digitalWrite(RTS, LOW);
+    //if(digitalRead(DCE_CTS) == HIGH) Serial.write("::DCE_CTS is high::");
+    //if(digitalRead(DCE_CTS) == LOW) Serial.write("::DCE_CTS is low::");
+
+    while (C64Serial.available())
+    {
+        // Command Mode -----------------------------------------------------------------------
+        if (Modem_isCommandMode)
+        {
+            //char inbound = toupper(_serial->read());
+            char inbound = C64Serial.read();
+
+            if (Modem_EchoOn) 
+            {
+                C64Serial.write(inbound);
+            }
+
+            if (IsBackSpace(inbound))
+            {
+                if (strlen(Modem_CommandBuffer) > 0)
+                {
+                    Modem_CommandBuffer[strlen(Modem_CommandBuffer) - 1] = '\0';
+                }
+            }
+            else if (inbound != '\r' && inbound != '\n' && inbound != Modem_S2_EscapeCharacter)
+            {
+                Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
+
+                if (toupper(Modem_CommandBuffer[0]) == 'A' && (Modem_CommandBuffer[1] == '/'))
+                {
+                    strcpy(Modem_CommandBuffer, Modem_LastCommandBuffer);
+                    Modem_ProcessCommandBuffer();
+                    Modem_ResetCommandBuffer();  // To prevent A matching with A/ again
+                }
+            }
+            else if (toupper(Modem_CommandBuffer[0]) == 'A' && toupper(Modem_CommandBuffer[1]) == 'T')
+            {
+                Modem_ProcessCommandBuffer();
+            }
+            else
+            {
+                Modem_ResetCommandBuffer();
+            }
+        }
+        
+        else    // Online ------------------------------------------
+        {
+            if (Modem_isConnected)
+            {
+                char inbound = C64Serial.read();
+
+                if (inbound == Modem_S2_EscapeCharacter)   
+                {
+                    Modem_EscapeCount++;
+                }
+                else
+                {
+                    Modem_EscapeCount = 0;
+                    // TODO, guard time!
+                }
+
+                if (Modem_EscapeCount == 3)
+                {
+                    Modem_EscapeCount = 0;
+                    Modem_isCommandMode = true;   // TODO, guard time!
+
+                    Modem_PrintOK();
+                }
+
+                int result = wifly.write(inbound);
+            }
+        }
+    }
+    //digitalWrite(DCE_RTS, LOW);
+}
+
+void Modem_Answer()
+{
+    if (!Modem_isRinging)
+    {
+        Modem_Disconnect();  // This prints "NO CARRIER"
+        return;
+    }
+
+    Modem_isConnected = true;
+    Modem_isCommandMode = false;
+    Modem_isRinging = false;
+
+/*
+    if (Modem_baudRate == 38400)
+    {
+        printResponse("28", F("CONNECT 38400"));
+    }
+    else if (_baudRate == 19200)
+    {
+        printResponse("14", F("CONNECT 19200"));
+    }
+    else if (_baudRate == 14400)
+    {
+        printResponse("13", F("CONNECT 14400"));
+    }
+    else if (_baudRate == 9600)
+    {
+        printResponse("12", F("CONNECT 9600"));
+    }
+    else if (_baudRate == 4800)
+    {
+        printResponse("11", F("CONNECT 4800"));
+    }
+    else if (_baudRate == 2400)
+    {
+        printResponse("10", F("CONNECT 2400"));
+    }
+    else if (_baudRate == 1200)
+    {
+        printResponse("5", F("CONNECT 1200"));
+    }
+    else
+    {
+
+        if (!_verboseResponses)
+            _serial->println('1');
+        else
+        {
+            _serial->print(F("CONNECT "));
+            _serial->println(_baudRate);
+        }
+    }
+    */
+
+    char temp[20];
+    sprintf(temp, "CONNECT %d", BAUD_RATE);
+    DisplayBoth(temp);
+
+    digitalWriteFast(C64_RTS, LOW);
+}
+
+void Modem_Dialout(char* host)
+{
+    char* index;
+    uint16_t port = 23;
+    String hostname = String(host);
+
+    if ((index = strstr(host, ":")) != NULL)
+    {
+        index[0] = '\0';
+        hostname = String(host);
+        port = atoi(index + 1);
+    }
+
+    if (hostname == "5551212")
+    {
+        QuantumLinkReloaded();
+        return;
+    }
+
+    Connect(hostname, port, false);
+}
+
+// Main processing loop for the virtual modem.  Needs refactoring!
+void Modem_Loop()
+{
+    // Check for new remote connection
+    if (!Modem_isConnected && !Modem_isRinging && wifly.isConnected())
+    {
+        wifly.println(F("CONNECTING TO SYSTEM."));
+        Display(F("INCOMING\nCALL"));
+        Modem_Ring();
+        return;
+    }
+
+    // Check for a dropped remote connection while ringing
+    if (Modem_isRinging && !wifly.isConnected())
+    {
+        Modem_Disconnect();
+        return;
+    }
+
+    // Check for a dropped remote connection while connected
+    if (Modem_isConnected && !wifly.isConnected())
+    {
+        Modem_Disconnect();
+        return;
+    }
+
+    // If connected but in command mode, handle incoming data	
+    if (Modem_isConnected && wifly.isConnected())
+    {
+        // Echo an error back to remote terminal if in command mode.
+        if (Modem_isCommandMode && wifly.available() > 0)
+        {
+            wifly.println(F("error: remote modem is in command mode."));
+        }
+    }
+
+    // Flow control, revisit
+    //else if (!modem.getIsConnected() && modem.getIsCommandMode())
+    //{
+        //digitalWrite(DCE_RTS, LOW);
+    //}
+    //else if(digitalRead(DTE_CTS) == HIGH)
+    //{
+    //	digitalWrite(DTE_RTS, LOW);
+    //}
+
+    // Handle all other data arriving on the serial port of the virtual modem.
+    Modem_ProcessData();
+
+    //digitalWrite(DCE_RTS, HIGH);
+}
+
+
+
+// -------------------------------------------------------------------------------------------------------------
+// QuantumLink Reloaded! Support
+
+void QuantumLinkReloaded()
+{
+
+   // Open("qlink.lyonlabs.org", 5190);
+
+}
+/*
+hostname = ;
+port = 5190;
+
+//Prepare to change the Arduino baud rate.
+Serial.flush();
+delay(2);
+Serial.end();
+
+//Change the arduino's baud rate.
+Serial.begin(115200);
+*/
+
 
 // EOF!

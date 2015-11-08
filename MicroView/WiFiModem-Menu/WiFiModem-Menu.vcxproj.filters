@@ -14,10 +14,8 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="petscii.h" />
-    <ClInclude Include="..\..\..\hayesduino\ModemBase.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="petscii.cpp" />
-    <ClCompile Include="..\..\..\hayesduino\ModemBase.cpp" />
   </ItemGroup>
 </Project>
