@@ -1,4 +1,10 @@
 
+Version 0.003 - WiFiModem-Menu-003.hex
+----------------------------------------
+
+Hayes Emulation mostly working (single AT command only)
+
+
 Version 0.002 - WiFiModem-Menu-002.hex
 ----------------------------------------
 

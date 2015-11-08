@@ -600,8 +600,6 @@ void Connect(String host, int port, boolean raw)
 
 void TerminalMode()
 {
-    C64Println(F("*** Terminal Mode ***"));
-
     while (wifly.available() != -1) // -1 means closed
     {
         while (wifly.available() > 0)
@@ -1037,7 +1035,6 @@ void Modem_Disconnect()
     delay(100);
     DisplayBoth(F("NO CARRIER"));
 
-    digitalWriteFast(C64_RTS, LOW);
     digitalWriteFast(C64_DTR, Modem_ToggleCarrier(false));
 }
 
@@ -1072,6 +1069,8 @@ void Modem_ProcessCommandBuffer()
     {
         SetPETSCIIMode(petscii_mode_guess);
     }
+
+    strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);
 
     // Force uppercase for consistency 
 
@@ -1205,7 +1204,7 @@ void Modem_ProcessCommandBuffer()
         Modem_PrintERROR();
     }
 
-    strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);
+    //strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);   // can't be here, already switched to uppercase
     Modem_ResetCommandBuffer();
 }
 
@@ -1229,9 +1228,17 @@ void Modem_Ring()
     }
 }
 
-void Modem_ConnectOut()
+void Modem_Connected()
 {
-    C64Serial.print(F("CONNECT "));
+    char temp[20];
+    sprintf(temp, "CONNECT %d", BAUD_RATE);
+    DisplayBoth(temp);
+
+    digitalWriteFast(C64_DTR, Modem_ToggleCarrier(true));
+
+    Modem_isConnected = true;
+    Modem_isCommandMode = false;
+    Modem_isRinging = false;
 
 /*
     if (_verboseResponses)
@@ -1276,12 +1283,7 @@ void Modem_ConnectOut()
             _serial->println(_baudRate);
         }
     }
-*/
-    digitalWriteFast(C64_DTR, Modem_ToggleCarrier(true));
-
-    Modem_isConnected = true;
-    Modem_isCommandMode = false;
-    Modem_isRinging = false;
+    */
 }
 
 void Modem_ProcessData()
@@ -1298,7 +1300,7 @@ void Modem_ProcessData()
             //char inbound = toupper(_serial->read());
             char inbound = C64Serial.read();
 
-            if (Modem_EchoOn) 
+            if (Modem_EchoOn)
             {
                 C64Serial.write(inbound);
             }
@@ -1330,14 +1332,14 @@ void Modem_ProcessData()
                 Modem_ResetCommandBuffer();
             }
         }
-        
+
         else    // Online ------------------------------------------
         {
             if (Modem_isConnected)
             {
                 char inbound = C64Serial.read();
 
-                if (inbound == Modem_S2_EscapeCharacter)   
+                if (inbound == Modem_S2_EscapeCharacter)
                 {
                     Modem_EscapeCount++;
                 }
@@ -1364,63 +1366,13 @@ void Modem_ProcessData()
 
 void Modem_Answer()
 {
-    if (!Modem_isRinging)
+    if (!Modem_isRinging)    // If not actually ringing...
     {
         Modem_Disconnect();  // This prints "NO CARRIER"
         return;
     }
 
-    Modem_isConnected = true;
-    Modem_isCommandMode = false;
-    Modem_isRinging = false;
-
-/*
-    if (Modem_baudRate == 38400)
-    {
-        printResponse("28", F("CONNECT 38400"));
-    }
-    else if (_baudRate == 19200)
-    {
-        printResponse("14", F("CONNECT 19200"));
-    }
-    else if (_baudRate == 14400)
-    {
-        printResponse("13", F("CONNECT 14400"));
-    }
-    else if (_baudRate == 9600)
-    {
-        printResponse("12", F("CONNECT 9600"));
-    }
-    else if (_baudRate == 4800)
-    {
-        printResponse("11", F("CONNECT 4800"));
-    }
-    else if (_baudRate == 2400)
-    {
-        printResponse("10", F("CONNECT 2400"));
-    }
-    else if (_baudRate == 1200)
-    {
-        printResponse("5", F("CONNECT 1200"));
-    }
-    else
-    {
-
-        if (!_verboseResponses)
-            _serial->println('1');
-        else
-        {
-            _serial->print(F("CONNECT "));
-            _serial->println(_baudRate);
-        }
-    }
-    */
-
-    char temp[20];
-    sprintf(temp, "CONNECT %d", BAUD_RATE);
-    DisplayBoth(temp);
-
-    digitalWriteFast(C64_RTS, LOW);
+    Modem_Connected();
 }
 
 void Modem_Dialout(char* host)
@@ -1428,6 +1380,12 @@ void Modem_Dialout(char* host)
     char* index;
     uint16_t port = 23;
     String hostname = String(host);
+
+    if (strlen(host) == 0)
+    {
+        Modem_PrintERROR();
+        return;
+    }
 
     if ((index = strstr(host, ":")) != NULL)
     {
@@ -1471,13 +1429,20 @@ void Modem_Loop()
         return;
     }
 
-    // If connected but in command mode, handle incoming data	
+    // If connected, handle incoming data	
     if (Modem_isConnected && wifly.isConnected())
     {
         // Echo an error back to remote terminal if in command mode.
         if (Modem_isCommandMode && wifly.available() > 0)
         {
             wifly.println(F("error: remote modem is in command mode."));
+        }
+        else
+        {
+            while (wifly.available() > 0)
+            {
+                C64Serial.write(wifly.read());
+            }
         }
     }
 
