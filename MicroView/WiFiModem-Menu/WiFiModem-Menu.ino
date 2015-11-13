@@ -69,107 +69,108 @@ int autostart_mode = EEPROM.read(ADDR_AUTOSTART);
 // ----------------------------------------------------------
 // Arduino Setup Function
 
-void setup()
-{
-    uView.begin(); // begin of MicroView
-    uView.setFontType(0);
-    uView.clear(ALL); // erase hardware memory inside the OLED controller
-
-    C64Serial.begin(BAUD_RATE);
-    WifiSerial.begin(BAUD_RATE);
-
-    C64Serial.setTimeout(1000);
-
-    if (BAUD_RATE > 2400)
+int main(void) {
+    init();
     {
-        pinModeFast(C64_RTS, INPUT);
-        pinModeFast(C64_CTS, OUTPUT);
-
-        pinModeFast(WIFI_RTS, INPUT);
-        pinModeFast(WIFI_CTS, OUTPUT);
-
-        // Force CTS to defaults on both sides to start, so data can get through
-        digitalWriteFast(WIFI_CTS, LOW);
-        digitalWriteFast(C64_CTS, HIGH);
+        uView.begin(); // begin of MicroView
+        uView.setFontType(0);
+        uView.clear(ALL); // erase hardware memory inside the OLED controller
+    
+        C64Serial.begin(BAUD_RATE);
+        WifiSerial.begin(BAUD_RATE);
+    
+        C64Serial.setTimeout(1000);
+    
+        if (BAUD_RATE > 2400)
+        {
+            pinModeFast(C64_RTS, INPUT);
+            pinModeFast(C64_CTS, OUTPUT);
+    
+            pinModeFast(WIFI_RTS, INPUT);
+            pinModeFast(WIFI_CTS, OUTPUT);
+    
+            // Force CTS to defaults on both sides to start, so data can get through
+            digitalWriteFast(WIFI_CTS, LOW);
+            digitalWriteFast(C64_CTS, HIGH);
+        }
+    
+        DisplayBoth(F("Wi-Fi Init..."));
+    
+        boolean ok = wifly.begin(&WifiSerial, &C64Serial);
+    
+        if (ok)
+        {
+            DisplayBoth(F("Wi-Fi OK!"));
+        }
+        else
+        {
+            DisplayBoth(F("Wi-Fi Failed!"));
+            RawTerminalMode();
+        }
+    
+        // Enable DNS caching, TCP retry, TCP_NODELAY, TCP connection status
+            wifly.setIpFlags(16 && 4 && 2 && 1);
+    
+        wifly.close();
+    
+        HandleAutoStart();
+    
+        C64Println();
+        C64Println(F("Commodore Wi-Fi Modem"));
+        ShowInfo(true);
     }
-
-    DisplayBoth(F("Wi-Fi Init..."));
-
-    boolean ok = wifly.begin(&WifiSerial, &C64Serial);
-
-    if (ok)
+    while (1)
     {
-        DisplayBoth(F("Wi-Fi OK!"));
-    }
-    else
-    {
-        DisplayBoth(F("Wi-Fi Failed!"));
-        RawTerminalMode();
-    }
-
-    wifly.close();
-
-    HandleAutoStart();
-
-    C64Println();
-    C64Println(F("Commodore Wi-Fi Modem"));
-    ShowInfo(true);
-}
-
-// ----------------------------------------------------------
-// Arduino Loop Function
-
-void loop()
-{
-    Display(F("READY."));
-
-    C64Println();
-    ShowPETSCIIMode();
-    C64Println();
-    C64Println(F("1. Telnet to host or BBS"));
-    C64Println(F("2. Wait for incoming connection"));
-    C64Println(F("3. Hayes Emulation Mode"));
-    C64Println(F("4. Configuration"));
-    C64Println();
-    C64Print(F("Select: "));
-
-    int option = ReadByte(C64Serial);
-    C64Serial.println((char)option);
-
-    switch (option)
-    {
-    case '1':
-        DoTelnet();
-        break;
-
-    case '2':
-        Incoming();
-        break;
-
-    case '3':
-        HayesEmulationMode();
-        break;
-
-    case '4':
-        Configuration();
-        break;
-
-    case '\n':
-    case '\r':
-    case ' ':
-        break;
-
-    case 8:
-        SetPETSCIIMode(false);
-        break;
-
-    case 20:
-        SetPETSCIIMode(true);
-        break;
-
-    default:
-        C64Println(F("Unknown option, try again"));
-        break;
+        Display(F("READY."));
+    
+        C64Println();
+        ShowPETSCIIMode();
+        C64Println();
+        C64Println(F("1. Telnet to host or BBS"));
+        C64Println(F("2. Wait for incoming connection"));
+        C64Println(F("3. Hayes Emulation Mode"));
+        C64Println(F("4. Configuration"));
+        C64Println();
+        C64Print(F("Select: "));
+    
+        int option = ReadByte(C64Serial);
+        C64Serial.println((char)option);
+    
+        switch (option)
+        {
+        case '1':
+            DoTelnet();
+            break;
+    
+        case '2':
+            Incoming();
+            break;
+    
+        case '3':
+            HayesEmulationMode();
+            break;
+    
+        case '4':
+                Configuration();
+            break;
+    
+        case '\n':
+        case '\r':
+        case ' ':
+            break;
+    
+        case 8:
+            SetPETSCIIMode(false);
+            break;
+    
+        case 20:
+            SetPETSCIIMode(true);
+            break;
+    
+        default:
+            C64Println(F("Unknown option, try again"));
+            break;
+        }
     }
 }
 
@@ -578,7 +579,14 @@ void Connect(String host, int port, boolean raw)
 
     wifly.setIpProtocol(WIFLY_PROTOCOL_TCP);
 
-    boolean ok = wifly.open(host.c_str(), port);
+    /* Do a DNS lookup to get the IP address.  Lookup has a 5 second timeout. */
+    char ip[16];
+    if (!wifly.getHostByName(host.c_str(), ip, sizeof(ip))) {
+       DisplayBoth(F("Could not resolve DNS.  Connect Failed!")); 
+       return;
+    }
+
+    boolean ok = wifly.open(ip, port);
 
     if (ok)
     {
