@@ -5,6 +5,10 @@
 
 #include "Arduino.h"
 
+char charset_p_topetcii(char c);
+char charset_p_toascii(char c);
+static char petcii_fix_dupes(char c);
+
 class petscii
 {
 private:
