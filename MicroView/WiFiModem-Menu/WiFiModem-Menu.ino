@@ -23,6 +23,7 @@
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
 #define BAUD_RATE 2400
+#define WiFly_BAUD_RATE 2400
 
 // Wifi
 // RxD is D0  (Hardware Serial)
@@ -52,6 +53,7 @@ int lastPort = 23;
 
 // Misc Values
 #define TIMEDOUT  -1
+int baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 
 // EEPROM Addresses
 #define ADDR_PETSCII       0
@@ -81,11 +83,11 @@ int main(void) {
         uView.clear(ALL); // erase hardware memory inside the OLED controller
     
         C64Serial.begin(BAUD_RATE);
-        WifiSerial.begin(BAUD_RATE);
+        WifiSerial.begin(WiFly_BAUD_RATE);
     
         C64Serial.setTimeout(1000);
     
-        if (BAUD_RATE > 2400)
+        if (BAUD_RATE > 2400 || baudMismatch)
         {
             pinModeFast(C64_RTS, INPUT);
             pinModeFast(C64_CTS, OUTPUT);
@@ -95,7 +97,7 @@ int main(void) {
     
             // Force CTS to defaults on both sides to start, so data can get through
             digitalWriteFast(WIFI_CTS, LOW);
-            digitalWriteFast(C64_CTS, HIGH);
+            digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
         }
     
         DisplayBoth(F("Wi-Fi Init..."));
@@ -628,12 +630,60 @@ void Connect(String host, int port, boolean raw)
 
 void TerminalMode()
 {
+    int data;
+    char buffer[100];
+    int buffer_index = 0;
+    int buffer_bytes = 0;
+    int max_buffer_size_reached = 0;
+    
     while (wifly.available() != -1) // -1 means closed
     {
-        while (wifly.available() > 0)
-        {
-            DoFlowControl();
-            C64Serial.write(wifly.read());
+        if (baudMismatch) {   // Assumes host is slower than WiFly
+            while (wifly.available() > 0)
+            {
+                digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+    
+                data = wifly.read();
+                buffer[buffer_index++] = data;
+                if (buffer_index > 99)
+                  buffer_index = 99;
+            }
+    
+            // Dump the buffer to the C64 before clearing WIFI_CTS
+            for(int i=0; i<buffer_index; i++) {
+                // Always do flow control if baudMismatch
+                // Check that C64 is ready to receive
+                while (digitalReadFast(C64_RTS) == LOW);   // If not...  C64 RTS and CTS are inverted.
+                C64Serial.write(buffer[i]);
+            }
+
+            // Only used for displaying max buffer size on Microview for testing
+            if (max_buffer_size_reached < buffer_index)
+                max_buffer_size_reached = buffer_index;
+            char message[20];
+            sprintf(message, "Buf: %d", max_buffer_size_reached);
+            Display(message);
+            
+            // Show largest buffer size on Microview
+            // 4800/9600 = 3
+            // 4800/19200 = 5
+            // 1200/19200 = doesn't work
+            // 4800/38400 = 12
+            // 2400/38400 = 40 - bbs.jammingsignal.com:23 (1200 baud) worked.
+            // 2400/38400 = 40 - cib.dyndns.com:6400 (19200 baud) worked.
+            // 2400/38400 = 40 - Linux telnet did not work with Novaterm.  Default flow tolerance = 200.  Set to 100 and sometimes connected.
+            // 9600/38400 = 11           
+
+            buffer_index = 0;
+              
+            digitalWriteFast(WIFI_CTS, LOW);
+        }
+        else {
+            while (wifly.available() > 0)
+            {
+                DoFlowControl();
+                C64Serial.write(wifly.read());
+            }
         }
 
         while (C64Serial.available() > 0)
@@ -684,7 +734,7 @@ void RawTerminalMode()
 
         if (changed)
         {
-            if (BAUD_RATE > 2400)
+            if (BAUD_RATE > 2400 || baudMismatch)
             {
                 sprintf(temp, "Wifi:%ld\n\nC64: %ld\n\nRTS: %ld", rnxv_chars, c64_chars, c64_rts_count);
             }
@@ -699,10 +749,11 @@ void RawTerminalMode()
 
 inline void DoFlowControl()
 {
-    if (BAUD_RATE > 2400)
+   
+    if (BAUD_RATE > 2400 || baudMismatch)
     {
         // Check that C64 is ready to receive
-        while (digitalReadFast(C64_RTS) == LOW)   // If not...
+        while (digitalReadFast(C64_RTS) == LOW)   // If not...  C64 RTS and CTS are inverted.
         {
             digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi and wait
         }
