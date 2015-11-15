@@ -4,6 +4,10 @@
     With assistance and code from Greg Alekel, Payton Byrd, Craig Bruce
 */
 
+// Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
+// This is required to ensure the compiled code is <= 30,720 bytes 
+//#define HAYES
+
 #include <MicroView.h>
 #include <elapsedMillis.h>
 #include <SoftwareSerial.h>
@@ -116,7 +120,11 @@ int main(void) {
         HandleAutoStart();
     
         C64Println();
+#ifdef HAYES
+        C64Println(F("Commodore Wi-Fi Modem Hayes"));
+#else
         C64Println(F("Commodore Wi-Fi Modem"));
+#endif // HAYES
         ShowInfo(true);
     }
     while (1)
@@ -126,10 +134,14 @@ int main(void) {
         C64Println();
         ShowPETSCIIMode();
         C64Println();
+#ifdef HAYES
+        C64Println(F("1. Hayes Emulation Mode"));
+        C64Println(F("2. Configuration"));
+#else
         C64Println(F("1. Telnet to host or BBS"));
         C64Println(F("2. Wait for incoming connection"));
-        C64Println(F("3. Hayes Emulation Mode"));
-        C64Println(F("4. Configuration"));
+        C64Println(F("3. Configuration"));
+#endif // HAYES
         C64Println();
         C64Print(F("Select: "));
     
@@ -138,6 +150,15 @@ int main(void) {
     
         switch (option)
         {
+#ifdef HAYES
+        case '1':
+            HayesEmulationMode();
+            break;
+    
+        case '2':
+                Configuration();
+            break;
+#else
         case '1':
             DoTelnet();
             break;
@@ -145,15 +166,12 @@ int main(void) {
         case '2':
             Incoming();
             break;
-    
+       
         case '3':
-            HayesEmulationMode();
-            break;
-    
-        case '4':
                 Configuration();
             break;
-    
+
+#endif // HAYES   
         case '\n':
         case '\r':
         case ' ':
@@ -488,6 +506,7 @@ void ShowInfo(boolean powerup)
     }
 }
 
+#ifndef HAYES
 // ----------------------------------------------------------
 // Simple Incoming connection handling
 
@@ -523,9 +542,9 @@ void Incoming()
 
     TerminalMode();
 }
-
 // ----------------------------------------------------------
 // Telnet Handling
+
 
 void DoTelnet()
 {
@@ -570,6 +589,7 @@ void DoTelnet()
         }
     }
 }
+#endif // HAYES
 
 void Connect(String host, int port, boolean raw)
 {
@@ -807,10 +827,17 @@ void ConfigureAutoStart()
         C64Println(F(")"));
         C64Println();
         C64Println(F("0. Clear Autostart Options"));
+#ifdef HAYES
         C64Println(F("1. Hayes Emulation Mode"));
         C64Println(F("2. CommodoreServer"));
         C64Println(F("3. QuantumLink Reloaded"));
         C64Println(F("4. Return to Main Menu"));
+#else
+        C64Println(F("1. CommodoreServer"));
+        C64Println(F("2. QuantumLink Reloaded"));
+        C64Println(F("3. Return to Main Menu"));
+#endif // HAYES
+
         C64Println();
         C64Print(F("Select: "));
 
@@ -821,7 +848,7 @@ void ConfigureAutoStart()
         {
         case '0': autostart_mode = AUTO_NONE;
             break;
-
+#ifdef HAYES
         case '1': autostart_mode = AUTO_HAYES;
             break;
 
@@ -832,6 +859,15 @@ void ConfigureAutoStart()
             break;
 
         case '4': return;
+#else
+        case '1': autostart_mode = AUTO_CSERVER;
+            break;
+
+        case '2': autostart_mode = AUTO_QLINK;
+            break;
+
+        case '3': return;
+#endif // HAYES
 
         case 8:
             SetPETSCIIMode(false);
@@ -864,11 +900,13 @@ void HandleAutoStart()
         case AUTO_NONE:  // No Autostart, continue as normal
             return;
 
+#ifdef HAYES
         case AUTO_HAYES: // Hayes Emulation
             C64Println(F("Entering Hayes Emulation Mode"));
             break;
 
-        case AUTO_CSERVER: // Hayes Emulation
+#endif // HAYES
+        case AUTO_CSERVER: // Commodore Server
             C64Println(F("Connecting to CommodoreServer"));
             break;
 
@@ -898,10 +936,11 @@ void HandleAutoStart()
 
     switch (autostart_mode)
     {
+#ifdef HAYES
         case AUTO_HAYES: // Hayes Emulation
             HayesEmulationMode();
             break;
-
+#endif // HAYES
         case AUTO_CSERVER: // CommodoreServer - just connect repeatedly
             while (true)
             {
@@ -920,6 +959,7 @@ void HandleAutoStart()
     }
 }
 
+#ifdef HAYES
 // ----------------------------------------------------------
 // Simple Hayes Emulation
 // Portions of this code are adapted from Payton Byrd's Hayesduino - thanks!
@@ -1470,7 +1510,7 @@ void Modem_Loop()
     //digitalWrite(DCE_RTS, HIGH);
 }
 
-
+#endif // HAYES
 
 // -------------------------------------------------------------------------------------------------------------
 // QuantumLink Reloaded! Support
