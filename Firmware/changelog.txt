@@ -1,3 +1,12 @@
+Version 0.004 - WiFiModem-Menu-003.hex
+----------------------------------------
+
+Fix for 'WiFly has crashed and will reboot...' message.
+Separated menu and Hayes versions into two separate firmare files to reduce compile size.
+Fixed missing port prompt when pressing <return> to connect to the last connected host in the menu firmware.
+New PETSCII code to reduce compile size.
+Ability to auto-start Hayes emulation mode or a CommodoreServer connection.  Autostart Options added to Configuration menu.
+
 
 Version 0.003 - WiFiModem-Menu-003.hex
 ----------------------------------------

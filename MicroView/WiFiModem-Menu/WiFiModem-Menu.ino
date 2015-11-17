@@ -18,7 +18,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.03"
+#define VERSION "0.04"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -64,11 +64,19 @@ int baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 
 // Autoconnect Options
+#ifdef HAYES
 #define AUTO_NONE     0
 #define AUTO_HAYES    1
 #define AUTO_CSERVER  2
-#define AUTO_QLINK    3
+//#define AUTO_QLINK    3
 #define AUTO_CUSTOM   100   // TODO
+#else
+#define AUTO_NONE     0
+#define AUTO_CSERVER  1
+//#define AUTO_QLINK    3
+#define AUTO_CUSTOM   100   // TODO
+
+#endif
 
 int autostart_mode = EEPROM.read(ADDR_AUTOSTART);
 
@@ -559,20 +567,7 @@ void DoTelnet()
 
     if (hostName.length() > 0)
     {
-        C64Print(F("\nPort ("));
-        C64Serial.print(lastPort);
-        C64Print(F("): "));
-
-        String strport = GetInput();
-
-        if (strport.length() > 0)
-        {
-            port = strport.toInt();
-        }
-        else
-        {
-            port = lastPort;
-        }
+        port = getPort();
 
         lastHost = hostName;
         lastPort = port;
@@ -583,7 +578,10 @@ void DoTelnet()
     {
         if (lastHost.length() > 0)
         {
-            Connect(lastHost, lastPort, false);
+            port = getPort();
+
+            lastPort=port;
+            Connect(lastHost, port, false);
         }
         else
         {
@@ -591,6 +589,26 @@ void DoTelnet()
         }
     }
 }
+
+int getPort(void)
+{
+    C64Print(F("\nPort ("));
+    C64Serial.print(lastPort);
+    C64Print(F("): "));
+    
+    String strport = GetInput();
+
+    if (strport.length() > 0)
+    {
+        return(strport.toInt());
+    }
+    else
+    {
+        return(lastPort);
+    }
+}
+
+
 #endif // HAYES
 
 void Connect(String host, int port, boolean raw)
@@ -881,12 +899,12 @@ void ConfigureAutoStart()
 #ifdef HAYES
         C64Println(F("1. Hayes Emulation Mode"));
         C64Println(F("2. CommodoreServer"));
-        C64Println(F("3. QuantumLink Reloaded"));
-        C64Println(F("4. Return to Main Menu"));
+//        C64Println(F("3. QuantumLink Reloaded"));
+        C64Println(F("3. Return to Main Menu"));
 #else
         C64Println(F("1. CommodoreServer"));
-        C64Println(F("2. QuantumLink Reloaded"));
-        C64Println(F("3. Return to Main Menu"));
+//        C64Println(F("2. QuantumLink Reloaded"));
+        C64Println(F("2. Return to Main Menu"));
 #endif // HAYES
 
         C64Println();
@@ -906,18 +924,20 @@ void ConfigureAutoStart()
         case '2': autostart_mode = AUTO_CSERVER;
             break;
 
-        case '3': autostart_mode = AUTO_QLINK;
-            break;
+//        case '3': autostart_mode = AUTO_QLINK;
+//            break;
 
-        case '4': return;
+//        case '4': return;
+        case '3': return;
 #else
         case '1': autostart_mode = AUTO_CSERVER;
             break;
 
-        case '2': autostart_mode = AUTO_QLINK;
-            break;
+//        case '2': autostart_mode = AUTO_QLINK;
+//            break;
 
-        case '3': return;
+//        case '3': return;
+        case '2': return;
 #endif // HAYES
 
         case 8:
@@ -961,9 +981,9 @@ void HandleAutoStart()
             C64Println(F("Connecting to CommodoreServer"));
             break;
 
-        case AUTO_QLINK: // QuantumLink Reloaded
-            C64Println(F("Ready to Connect to QuantumLink Reloaded"));          
-            break;
+//        case AUTO_QLINK: // QuantumLink Reloaded
+//            C64Println(F("Ready to Connect to QuantumLink Reloaded"));          
+//            break;
 
         default: // Invalid - on first startup or if corrupted.  Clear silently and continue to menu.
             EEPROM.write(ADDR_AUTOSTART, AUTO_NONE);
@@ -1000,10 +1020,10 @@ void HandleAutoStart()
             }
             break;
 
-        case AUTO_QLINK: // QuantumLink Reloaded
-            // !!!! Not 100% sure what to do here.  Need 1200 baud.
-            C64Println(F("TODO: Not Implemented!"));  //  !!!! TODO
-            return;   // !!!!
+//        case AUTO_QLINK: // QuantumLink Reloaded
+//            // !!!! Not 100% sure what to do here.  Need 1200 baud.
+//            C64Println(F("TODO: Not Implemented!"));  //  !!!! TODO
+//            return;   // !!!!
 
         default: // Shouldn't ever reach here.  Just continue to menu if so.
             return;
