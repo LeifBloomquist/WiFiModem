@@ -24,6 +24,7 @@
 
 #define BAUD_RATE 2400
 #define WiFly_BAUD_RATE 2400
+#define MIN_FLOW_CONTROL_RATE 4800  // If BAUD rate is this speed or higher, RTS/CTS flow control is enabled.
 
 // Wifi
 // RxD is D0  (Hardware Serial)
@@ -54,6 +55,7 @@ int lastPort = 23;
 // Misc Values
 #define TIMEDOUT  -1
 int baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
+boolean Modem_flowControlEnabled = false;   // for &K setting.  Not currently stored in EEPROM
 
 // EEPROM Addresses
 #define ADDR_PETSCII       0
@@ -94,19 +96,17 @@ int main(void) {
         WifiSerial.begin(WiFly_BAUD_RATE);
     
         C64Serial.setTimeout(1000);
+
+        // Always setup pins for flow control
+        pinModeFast(C64_RTS, INPUT);
+        pinModeFast(C64_CTS, OUTPUT);
     
-        if (BAUD_RATE > 2400 || baudMismatch)
-        {
-            pinModeFast(C64_RTS, INPUT);
-            pinModeFast(C64_CTS, OUTPUT);
+        pinModeFast(WIFI_RTS, INPUT);
+        pinModeFast(WIFI_CTS, OUTPUT);
     
-            pinModeFast(WIFI_RTS, INPUT);
-            pinModeFast(WIFI_CTS, OUTPUT);
-    
-            // Force CTS to defaults on both sides to start, so data can get through
-            digitalWriteFast(WIFI_CTS, LOW);
-            digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
-        }
+        // Force CTS to defaults on both sides to start, so data can get through
+        digitalWriteFast(WIFI_CTS, LOW);
+        digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
     
         DisplayBoth(F("Wi-Fi Init..."));
     
@@ -761,7 +761,7 @@ void RawTerminalMode()
 
         if (changed)
         {
-            if (BAUD_RATE > 2400 || baudMismatch)
+            if (Modem_flowControlEnabled || BAUD_RATE >= MIN_FLOW_CONTROL_RATE || baudMismatch)
             {
                 sprintf(temp, "Wifi:%ld\n\nC64: %ld\n\nRTS: %ld", rnxv_chars, c64_chars, c64_rts_count);
             }
@@ -777,7 +777,7 @@ void RawTerminalMode()
 inline void DoFlowControl()
 {
    
-    if (BAUD_RATE > 2400 || baudMismatch)
+    if (Modem_flowControlEnabled || BAUD_RATE >= MIN_FLOW_CONTROL_RATE || baudMismatch)
     {
         // Check that C64 is ready to receive
         while (digitalReadFast(C64_RTS) == LOW)   // If not...  C64 RTS and CTS are inverted.
@@ -1307,6 +1307,14 @@ void Modem_ProcessCommandBuffer()
         {
             // TODO
         }
+        if (strstr(Modem_CommandBuffer, ("&K0")) != NULL)
+        {
+            Modem_flowControlEnabled = false;
+        }
+        if (strstr(Modem_CommandBuffer, ("&K1")) != NULL)
+        {
+            Modem_flowControlEnabled = true;
+        }
 
         char *currentS;
         char temp[100];
@@ -1422,9 +1430,12 @@ void Modem_ProcessData()
 
     while (C64Serial.available())
     {
+        
         // Command Mode -----------------------------------------------------------------------
         if (Modem_isCommandMode)
         {
+            if (Modem_flowControlEnabled) 
+                digitalWriteFast(C64_CTS, LOW);
             //char inbound = toupper(_serial->read());
             char inbound = C64Serial.read();
 
@@ -1453,6 +1464,8 @@ void Modem_ProcessData()
                     if (toupper(Modem_CommandBuffer[0]) == 'A' && (Modem_CommandBuffer[1] == '/'))
                     {
                         strcpy(Modem_CommandBuffer, Modem_LastCommandBuffer);
+                        if (Modem_flowControlEnabled) 
+                            digitalWriteFast(C64_CTS, HIGH);
                         Modem_ProcessCommandBuffer();
                         Modem_ResetCommandBuffer();  // To prevent A matching with A/ again
                     }
@@ -1460,6 +1473,8 @@ void Modem_ProcessData()
             }
             else if (toupper(Modem_CommandBuffer[0]) == 'A' && toupper(Modem_CommandBuffer[1]) == 'T')
             {
+                if (Modem_flowControlEnabled) 
+                    digitalWriteFast(C64_CTS, HIGH);
                 Modem_ProcessCommandBuffer();
             }
             else
@@ -1497,6 +1512,8 @@ void Modem_ProcessData()
         }
     }
     //digitalWrite(DCE_RTS, LOW);
+    if (Modem_flowControlEnabled) 
+        digitalWriteFast(C64_CTS, HIGH);
 }
 
 void Modem_Answer()
@@ -1541,8 +1558,10 @@ void Modem_Dialout(char* host)
 // Main processing loop for the virtual modem.  Needs refactoring!
 void Modem_Loop()
 {
+    boolean isConnected = wifly.isConnected();
+    
     // Check for new remote connection
-    if (!Modem_isConnected && !Modem_isRinging && wifly.isConnected())
+    if (!Modem_isConnected && !Modem_isRinging && isConnected)
     {
         wifly.println(F("CONNECTING TO SYSTEM."));
         Display(F("INCOMING\nCALL"));
@@ -1551,21 +1570,21 @@ void Modem_Loop()
     }
 
     // Check for a dropped remote connection while ringing
-    if (Modem_isRinging && !wifly.isConnected())
+    if (Modem_isRinging && !isConnected)
     {
         Modem_Disconnect();
         return;
     }
 
     // Check for a dropped remote connection while connected
-    if (Modem_isConnected && !wifly.isConnected())
+    if (Modem_isConnected && !isConnected)
     {
         Modem_Disconnect();
         return;
     }
 
     // If connected, handle incoming data	
-    if (Modem_isConnected && wifly.isConnected())
+    if (Modem_isConnected && isConnected)
     {
         // Echo an error back to remote terminal if in command mode.
         if (Modem_isCommandMode && wifly.available() > 0)
