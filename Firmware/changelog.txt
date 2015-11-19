@@ -1,5 +1,11 @@
-Version 0.004 - WiFiModem-Menu-003.hex
-----------------------------------------
+Version 0.05b1 - WiFiModem-Menu-005b1.hex / WiFiModem-Menu-005b1-hayes.hex
+--------------------------------------------------------------------------
+
+Fix bug with buffer overflow for AT commands
+
+
+Version 0.04 - WiFiModem-Menu-004.hex / WiFiModem-Menu-004-hayes.hex
+--------------------------------------------------------------------
 
 Fix for 'WiFly has crashed and will reboot...' message.
 Separated menu and Hayes versions into two separate firmare files to reduce compile size.
@@ -8,13 +14,13 @@ New PETSCII code to reduce compile size.
 Ability to auto-start Hayes emulation mode or a CommodoreServer connection.  Autostart Options added to Configuration menu.
 
 
-Version 0.003 - WiFiModem-Menu-003.hex
+Version 0.03 - WiFiModem-Menu-003.hex
 ----------------------------------------
 
 Hayes Emulation mostly working (single AT command only)
 
 
-Version 0.002 - WiFiModem-Menu-002.hex
+Version 0.02 - WiFiModem-Menu-002.hex
 ----------------------------------------
 
 Extended PETSCII Support - all menus detect backspace to switch
@@ -24,7 +30,7 @@ Code cleanup
 Hayes Emulation started (not functional yet)
 
 
-Version 0.001 - WiFiModem-Menu-001.hex
+Version 0.01 - WiFiModem-Menu-001.hex
 ----------------------------------------
 
 PETSCII Support

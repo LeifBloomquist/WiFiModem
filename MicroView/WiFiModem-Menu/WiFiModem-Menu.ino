@@ -6,8 +6,8 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-//#define HAYES
-
+#define HAYES
+//#define ENABLE_C64_DCD
 #include <MicroView.h>
 #include <elapsedMillis.h>
 #include <SoftwareSerial.h>
@@ -18,7 +18,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.04"
+#define VERSION "0.05b1"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -126,7 +126,10 @@ int main(void) {
             wifly.setIpFlags(16 && 4 && 2 && 1);
     
         wifly.close();
-    
+
+#ifdef ENABLE_C64_DCD
+        digitalWriteFast(C64_DCD, true);    // true = no carrier
+#endif    
         HandleAutoStart();
     
         C64Println();
@@ -632,6 +635,9 @@ void Connect(String host, int port, boolean raw)
     {
         sprintf(temp, "Connected to %s", host.c_str());
         DisplayBoth(temp);
+#ifdef ENABLE_C64_DCD
+        digitalWriteFast(C64_DCD, false);
+#endif
     }
     else
     {
@@ -718,6 +724,9 @@ void TerminalMode()
 
     wifly.close();
     DisplayBoth(F("Connection closed"));
+#ifdef ENABLE_C64_DCD
+    digitalWriteFast(C64_DCD, false);
+#endif
 }
 
 // Raw Terminal Mode.  There is no escape.
@@ -1057,7 +1066,7 @@ void HayesEmulationMode()
     pinModeFast(C64_RI, OUTPUT);
     pinModeFast(C64_DSR, OUTPUT);
     pinModeFast(C64_DTR, OUTPUT);
-    pinModeFast(C64_DCD, INPUT);
+    pinModeFast(C64_DCD, OUTPUT);
     pinModeFast(C64_RTS, INPUT);
 
     digitalWriteFast(C64_RI, LOW);
@@ -1433,13 +1442,20 @@ void Modem_ProcessData()
             }
             else if (inbound != '\r' && inbound != '\n' && inbound != Modem_S2_EscapeCharacter)
             {
-                Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
-
-                if (toupper(Modem_CommandBuffer[0]) == 'A' && (Modem_CommandBuffer[1] == '/'))
-                {
-                    strcpy(Modem_CommandBuffer, Modem_LastCommandBuffer);
-                    Modem_ProcessCommandBuffer();
-                    Modem_ResetCommandBuffer();  // To prevent A matching with A/ again
+                if (strlen(Modem_CommandBuffer) >= COMMAND_BUFFER_SIZE) {
+                  Display (F("CMD Buf Overflow"));
+                  Modem_PrintERROR();
+                  Modem_ResetCommandBuffer();
+                }
+                else {
+                    Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
+    
+                    if (toupper(Modem_CommandBuffer[0]) == 'A' && (Modem_CommandBuffer[1] == '/'))
+                    {
+                        strcpy(Modem_CommandBuffer, Modem_LastCommandBuffer);
+                        Modem_ProcessCommandBuffer();
+                        Modem_ResetCommandBuffer();  // To prevent A matching with A/ again
+                    }
                 }
             }
             else if (toupper(Modem_CommandBuffer[0]) == 'A' && toupper(Modem_CommandBuffer[1]) == 'T')
