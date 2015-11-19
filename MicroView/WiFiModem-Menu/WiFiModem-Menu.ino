@@ -409,7 +409,7 @@ void ShowPETSCIIMode()
     }
     else
     {
-        C64Serial.print("ASCII Mode");
+        C64Serial.print(F("ASCII Mode"));
     }
 
     C64Println(F(" (Del to switch)"));
@@ -1024,7 +1024,7 @@ void HandleAutoStart()
         case AUTO_CSERVER: // CommodoreServer - just connect repeatedly
             while (true)
             {
-                Connect("www.commodoreserver.com", 1541, true);
+                Connect(F("www.commodoreserver.com"), 1541, true);
                 delay(1000);
             }
             break;
@@ -1546,11 +1546,11 @@ void Modem_Dialout(char* host)
         port = atoi(index + 1);
     }
 
-    if (hostname == "5551212")
+    /*if (hostname == F("5551212"))
     {
         QuantumLinkReloaded();
         return;
-    }
+    }*/
 
     Connect(hostname, port, false);
 }
@@ -1620,13 +1620,13 @@ void Modem_Loop()
 
 // -------------------------------------------------------------------------------------------------------------
 // QuantumLink Reloaded! Support
-
+/*
 void QuantumLinkReloaded()
 {
 
    // Open("qlink.lyonlabs.org", 5190);
 
-}
+}*/
 /*
 hostname = ;
 port = 5190;
