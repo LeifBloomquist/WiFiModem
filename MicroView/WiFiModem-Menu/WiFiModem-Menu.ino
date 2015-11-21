@@ -723,7 +723,12 @@ void TerminalMode()
     }
 
     wifly.close();
+#ifdef HAYES          
+    Modem_Disconnect();
+    Display(F("Connection closed"));
+#else
     DisplayBoth(F("Connection closed"));
+#endif
 #ifdef ENABLE_C64_DCD
     digitalWriteFast(C64_DCD, false);
 #endif
@@ -1428,9 +1433,8 @@ void Modem_ProcessData()
     //if(digitalRead(DCE_CTS) == HIGH) Serial.write("::DCE_CTS is high::");
     //if(digitalRead(DCE_CTS) == LOW) Serial.write("::DCE_CTS is low::");
 
-    while (C64Serial.available())
+    while (C64Serial.available() >0)
     {
-        
         // Command Mode -----------------------------------------------------------------------
         if (Modem_isCommandMode)
         {
@@ -1441,6 +1445,10 @@ void Modem_ProcessData()
 
             if (Modem_EchoOn)
             {
+                if (!Modem_flowControlEnabled) 
+                    delay(100);         // Slow down command mode to prevent garbage if flow control 
+                                        // is disabled.  Should be able to lower for higher speeds
+                                        // TODO:  Adapt for higher speeds.
                 C64Serial.write(inbound);
             }
 
@@ -1558,45 +1566,49 @@ void Modem_Dialout(char* host)
 // Main processing loop for the virtual modem.  Needs refactoring!
 void Modem_Loop()
 {
-    boolean isConnected = wifly.isConnected();
-    
-    // Check for new remote connection
-    if (!Modem_isConnected && !Modem_isRinging && isConnected)
-    {
-        wifly.println(F("CONNECTING TO SYSTEM."));
-        Display(F("INCOMING\nCALL"));
-        Modem_Ring();
-        return;
-    }
+    boolean wiflyIsConnected = wifly.isConnected();
 
-    // Check for a dropped remote connection while ringing
-    if (Modem_isRinging && !isConnected)
-    {
-        Modem_Disconnect();
-        return;
-    }
-
-    // Check for a dropped remote connection while connected
-    if (Modem_isConnected && !isConnected)
-    {
-        Modem_Disconnect();
-        return;
-    }
-
-    // If connected, handle incoming data	
-    if (Modem_isConnected && isConnected)
-    {
-        // Echo an error back to remote terminal if in command mode.
-        if (Modem_isCommandMode && wifly.available() > 0)
+    if (wiflyIsConnected) {
+        // Check for new remote connection
+        if (!Modem_isConnected && !Modem_isRinging)
         {
-            wifly.println(F("error: remote modem is in command mode."));
+            wifly.println(F("CONNECTING TO SYSTEM."));
+            Display(F("INCOMING\nCALL"));
+            Modem_Ring();
+            return;
         }
-        else
+    
+        // If connected, handle incoming data  
+        if (Modem_isConnected)
         {
-            while (wifly.available() > 0)
+            // Echo an error back to remote terminal if in command mode.
+            if (Modem_isCommandMode && wifly.available() > 0)
             {
-                C64Serial.write(wifly.read());
+                wifly.println(F("error: remote modem is in command mode."));
             }
+            else
+            {
+                while (wifly.available() > 0)
+                {
+                    C64Serial.write(wifly.read());
+                }
+            }
+        }
+    }
+    else
+    {
+        // Check for a dropped remote connection while ringing
+        if (Modem_isRinging)
+        {
+            Modem_Disconnect();
+            return;
+        }
+    
+        // Check for a dropped remote connection while connected
+        if (Modem_isConnected)
+        {
+            Modem_Disconnect();
+            return;
         }
     }
 
