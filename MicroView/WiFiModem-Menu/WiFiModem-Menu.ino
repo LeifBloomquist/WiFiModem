@@ -6,7 +6,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-#define HAYES
+//#define HAYES
 //#define ENABLE_C64_DCD
 #include <MicroView.h>
 #include <elapsedMillis.h>
@@ -54,7 +54,7 @@ int lastPort = 23;
 
 // Misc Values
 #define TIMEDOUT  -1
-int baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
+boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 boolean Modem_flowControlEnabled = false;   // for &K setting.  Not currently stored in EEPROM
 
 // EEPROM Addresses
@@ -80,7 +80,7 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 
 #endif
 
-int autostart_mode = EEPROM.read(ADDR_AUTOSTART);
+byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
 
 // ----------------------------------------------------------
 // Arduino Setup Function
@@ -355,12 +355,30 @@ void Display(String message)
     uView.display();
 }
 
+// Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
+void DisplayP(const char *message)
+{
+    uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
+    uView.setCursor(0, 0);
+    uView.println(message);
+    uView.display();
+}
+
 void DisplayBoth(String message)
 {
     C64Println(message);
     message.replace(' ', '\n');
     Display(message);
 }
+
+// Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
+void DisplayBothP(const char *message)
+{
+    C64PrintlnP(message);
+    //message.replace(' ', '\n');
+    DisplayP(message);
+}
+
 
 // ----------------------------------------------------------
 // Wrappers that always print correctly for ASCII/PETSCII
@@ -380,6 +398,26 @@ void C64Print(String message)
 void C64Println(String message)
 {
     C64Print(message);
+    C64Serial.println();
+}
+
+// Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
+void C64PrintP(const char *message)
+{
+    if (petscii_mode)
+    {
+        C64Serial.print(petscii::ToPETSCII(message));
+    }
+    else
+    {
+        C64Serial.print(message);
+    }
+}
+
+// Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
+void C64PrintlnP(const char *message)
+{
+    C64PrintP(message);
     C64Serial.println();
 }
 
@@ -501,19 +539,19 @@ void ShowInfo(boolean powerup)
     {
         char temp[50];
 
-        sprintf(temp, "Firmware\n\n%s", VERSION);
+        sprintf_P(temp, PSTR("Firmware\n\n%s"), VERSION);
         Display(temp);
         delay(1000);
 
-        sprintf(temp, "Baud Rate\n\n%d", BAUD_RATE);
+        sprintf_P(temp, PSTR("Baud Rate\n\n%d"), BAUD_RATE);
         Display(temp);
         delay(1000);
 
-        sprintf(temp, "IP Address \n%s", ip);
+        sprintf_P(temp, PSTR("IP Address \n%s"), ip);
         Display(temp);
         delay(1000);
 
-        sprintf(temp, "SSID\n\n%s", ssid);
+        sprintf_P(temp, PSTR("SSID\n\n%s"), ssid);
         Display(temp);
         delay(1000);
     }
@@ -617,8 +655,12 @@ int getPort(void)
 void Connect(String host, int port, boolean raw)
 {
     char temp[50];
-    sprintf(temp, "\nConnecting to %s", host.c_str());
-    DisplayBoth(temp);
+    sprintf_P(temp, PSTR("\nConnecting to %s"), host.c_str());
+#ifdef HAYES
+    DisplayP(temp);
+#else
+    DisplayBothP(temp);
+#endif
 
     wifly.setIpProtocol(WIFLY_PROTOCOL_TCP);
 
@@ -633,15 +675,23 @@ void Connect(String host, int port, boolean raw)
 
     if (ok)
     {
-        sprintf(temp, "Connected to %s", host.c_str());
-        DisplayBoth(temp);
+        sprintf_P(temp, PSTR("Connected to %s"), host.c_str());
+#ifdef HAYES
+        DisplayP(temp);
+#else
+        DisplayBothP(temp);
+#endif
 #ifdef ENABLE_C64_DCD
         digitalWriteFast(C64_DCD, false);
 #endif
     }
     else
     {
+#ifdef HAYES
+        Display(F("Connect Failed!"));
+#else
         DisplayBoth(F("Connect Failed!"));
+#endif
         return;
     }
 
@@ -649,6 +699,17 @@ void Connect(String host, int port, boolean raw)
     {
         CheckTelnet();
     }
+
+    /*
+    // Display free RAM.  When this was ~184, Microview wouldn't display..
+    char temp3[10];
+    itoa(freeRam(), temp3, 10);
+    DisplayP(temp3);
+    delay (2000);*/
+    
+#ifdef HAYES
+    Modem_Connected();
+#endif
     TerminalMode();
 }
 
@@ -685,7 +746,7 @@ void TerminalMode()
             if (max_buffer_size_reached < buffer_index)
                 max_buffer_size_reached = buffer_index;
             char message[20];
-            sprintf(message, "Buf: %d", max_buffer_size_reached);
+            sprintf_P(message, PSTR("Buf: %d"), max_buffer_size_reached);
             Display(message);
             
             // Show largest buffer size on Microview
@@ -721,11 +782,10 @@ void TerminalMode()
             break;
         }
     }
-
     wifly.close();
+
 #ifdef HAYES          
     Modem_Disconnect();
-    Display(F("Connection closed"));
 #else
     DisplayBoth(F("Connection closed"));
 #endif
@@ -768,11 +828,11 @@ void RawTerminalMode()
         {
             if (Modem_flowControlEnabled || BAUD_RATE >= MIN_FLOW_CONTROL_RATE || baudMismatch)
             {
-                sprintf(temp, "Wifi:%ld\n\nC64: %ld\n\nRTS: %ld", rnxv_chars, c64_chars, c64_rts_count);
+                sprintf_P(temp, PSTR("Wifi:%ld\n\nC64: %ld\n\nRTS: %ld"), rnxv_chars, c64_chars, c64_rts_count);
             }
             else
             {
-                sprintf(temp, "Wifi:%ld\n\nC64: %ld", rnxv_chars, c64_chars);
+                sprintf_P(temp, PSTR("Wifi:%ld\n\nC64: %ld"), rnxv_chars, c64_chars);
             }
             Display(temp);
         }
@@ -1009,7 +1069,7 @@ void HandleAutoStart()
 
     C64Println(F("Press any key to cancel..."));
 
-    int option = PeekByte(C64Serial, 5000);
+    int option = PeekByte(C64Serial, 2000);
 
     if (option != TIMEDOUT)   // Key pressed
     {
@@ -1153,11 +1213,10 @@ int Modem_ToggleCarrier(boolean isHigh)
 
 void Modem_Disconnect()
 {
+    char temp[15];
     Modem_isCommandMode = true;
     Modem_isConnected = false;
     Modem_isRinging = false;    
-
-    wifly.close();
 
     // TODO - According to http://totse2.net/totse/en/technology/telecommunications/trm.html
     //		  The BBS should detect <CR><LF>NO CARRIER<CR><LF> as a dropped carrier sequences.
@@ -1165,8 +1224,13 @@ void Modem_Disconnect()
 
     // LB: Added back in for user feedback
 
+    delay(500);
+    sprintf_P(temp, PSTR("\n\rNO CARRIER\n\r"));
+    DisplayBothP(temp);
     delay(100);
-    DisplayBoth(F("NO CARRIER"));
+
+    if (wifly.available() == -1)
+        wifly.close();
 
     digitalWriteFast(C64_DTR, Modem_ToggleCarrier(false));
 }
@@ -1259,12 +1323,12 @@ void Modem_ProcessCommandBuffer()
         strncmp(Modem_CommandBuffer, ("ATD "), 4) == 0
         )
     {
-        Modem_Dialout(strstr(Modem_CommandBuffer, " ") + 1);
+        Modem_Dialout(strstr(Modem_CommandBuffer, " ") + 1,0);
         Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
     }
     else if (strncmp(Modem_CommandBuffer, ("ATDT"), 4) == 0)
     {
-        Modem_Dialout(strstr(Modem_CommandBuffer, "ATDT") + 4);
+        Modem_Dialout(strstr(Modem_CommandBuffer, "ATDT") + 4,0);
         Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
     }
     else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
@@ -1320,6 +1384,12 @@ void Modem_ProcessCommandBuffer()
         {
             Modem_flowControlEnabled = true;
         }
+        /*
+        if (strstr(Modem_CommandBuffer, ("DL")) != NULL)
+        {
+            Modem_Dialout("",1);
+            Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
+        }*/
 
         char *currentS;
         char temp[100];
@@ -1372,8 +1442,9 @@ void Modem_Ring()
 void Modem_Connected()
 {
     char temp[20];
-    sprintf(temp, "CONNECT %d", BAUD_RATE);
-    DisplayBoth(temp);
+    sprintf_P(temp, PSTR("CONNECT %d"), BAUD_RATE);
+    
+    DisplayBothP(temp);
 
     digitalWriteFast(C64_DTR, Modem_ToggleCarrier(true));
 
@@ -1446,9 +1517,8 @@ void Modem_ProcessData()
             if (Modem_EchoOn)
             {
                 if (!Modem_flowControlEnabled) 
-                    delay(100);         // Slow down command mode to prevent garbage if flow control 
-                                        // is disabled.  Should be able to lower for higher speeds
-                                        // TODO:  Adapt for higher speeds.
+                    delay(100/(BAUD_RATE/2400));         // Slow down command mode to prevent garbage if flow control 
+                                                         // is disabled.  Doesn't work at 9600.  TODO:  Fix
                 C64Serial.write(inbound);
             }
 
@@ -1535,11 +1605,26 @@ void Modem_Answer()
     Modem_Connected();
 }
 
-void Modem_Dialout(char* host)
+void Modem_Dialout(char* host, int redial)
 {
     char* index;
     uint16_t port = 23;
-    String hostname = String(host);
+    String hostname;
+
+    if (redial) {
+        if (lastHost.length() > 0)
+        {
+            hostname = lastHost;
+            port = lastPort;
+        }
+        else {
+            Modem_PrintERROR();
+            return;
+        }
+    }
+    else {
+      hostname = String(host);
+    }
 
     if (strlen(host) == 0)
     {
@@ -1559,6 +1644,9 @@ void Modem_Dialout(char* host)
         QuantumLinkReloaded();
         return;
     }*/
+
+    //lastHost = hostname;
+    //lastPort = port;
 
     Connect(hostname, port, false);
 }
@@ -1591,6 +1679,7 @@ void Modem_Loop()
                 while (wifly.available() > 0)
                 {
                     C64Serial.write(wifly.read());
+                    // TODO:  Review..  Flow control?
                 }
             }
         }
@@ -1653,4 +1742,12 @@ Serial.begin(115200);
 */
 
 
+int freeRam () 
+{
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
+
 // EOF!
+
