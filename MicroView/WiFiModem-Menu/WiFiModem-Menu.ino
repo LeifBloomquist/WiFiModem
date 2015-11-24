@@ -55,12 +55,16 @@ int lastPort = 23;
 // Misc Values
 #define TIMEDOUT  -1
 boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
-boolean Modem_flowControlEnabled = false;   // for &K setting.  Not currently stored in EEPROM
+#ifndef HAYES
+boolean Modem_flowControlEnabled = false;   // Should this be a menu option for non-Hayes mode?
+#endif
 
 // EEPROM Addresses
 #define ADDR_PETSCII       0
 #define ADDR_AUTOSTART     1
 #define ADDR_MODEM_ECHO    10
+#define ADDR_MODEM_FLOW    11
+
 
 // PETSCII state
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
@@ -80,6 +84,30 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 
 #endif
 
+#ifdef HAYES
+// ----------------------------------------------------------
+// Simple Hayes Emulation
+// Portions of this code are adapted from Payton Byrd's Hayesduino - thanks!
+
+boolean Modem_isCommandMode = true;
+boolean Modem_isConnected = false;
+boolean Modem_isRinging = false;
+boolean Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
+boolean Modem_flowControlEnabled = EEPROM.read(ADDR_MODEM_FLOW);
+boolean Modem_VerboseResponses = true;
+boolean Modem_QuietMode = false;
+boolean Modem_isDcdInverted = false;
+
+boolean Modem_S0_AutoAnswer = false;
+char    Modem_S2_EscapeCharacter = '+';
+
+#define COMMAND_BUFFER_SIZE  81
+char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
+char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
+
+int Modem_EscapeCount = 0;
+#endif
+
 byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
 
 // ----------------------------------------------------------
@@ -87,7 +115,7 @@ byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
 
 int main(void) {
     init();
-    {
+    {        
         uView.begin(); // begin of MicroView
         uView.setFontType(0);
         uView.clear(ALL); // erase hardware memory inside the OLED controller
@@ -395,9 +423,19 @@ void C64Print(String message)
     }
 }
 
+void C64PrintInt(int message)
+{
+    C64Serial.print(message);
+}
 void C64Println(String message)
 {
     C64Print(message);
+    C64Serial.println();
+}
+
+void C64PrintIntln(int message)
+{
+    C64PrintInt(message);
     C64Serial.println();
 }
 
@@ -1105,26 +1143,6 @@ void HandleAutoStart()
 }
 
 #ifdef HAYES
-// ----------------------------------------------------------
-// Simple Hayes Emulation
-// Portions of this code are adapted from Payton Byrd's Hayesduino - thanks!
-
-boolean Modem_isCommandMode = true;
-boolean Modem_isConnected = false;
-boolean Modem_isRinging = false;
-boolean Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
-boolean Modem_VerboseResponses = true;
-boolean Modem_QuietMode = false;
-boolean Modem_isDcdInverted = false;
-
-boolean Modem_S0_AutoAnswer = false;
-char    Modem_S2_EscapeCharacter = '+';
-
-#define COMMAND_BUFFER_SIZE  81
-char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
-char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
-
-int Modem_EscapeCount = 0;
 
 void HayesEmulationMode()
 {
@@ -1347,6 +1365,11 @@ void Modem_ProcessCommandBuffer()
             Modem_EchoOn = true;
         }
 
+        if (strstr(Modem_CommandBuffer, ("E?")) != NULL)
+        {
+            C64PrintIntln(EEPROM.read(ADDR_MODEM_ECHO));
+        }
+
         if (strstr(Modem_CommandBuffer, ("Q0")) != NULL)
         {
             Modem_VerboseResponses = false;
@@ -1379,17 +1402,22 @@ void Modem_ProcessCommandBuffer()
         if (strstr(Modem_CommandBuffer, ("&K0")) != NULL)
         {
             Modem_flowControlEnabled = false;
+            EEPROM.write(ADDR_MODEM_FLOW, 0);
         }
         if (strstr(Modem_CommandBuffer, ("&K1")) != NULL)
         {
             Modem_flowControlEnabled = true;
+            EEPROM.write(ADDR_MODEM_FLOW, 1);
         }
-        /*
+        if (strstr(Modem_CommandBuffer, ("&K?")) != NULL)
+        {
+            C64PrintIntln(EEPROM.read(ADDR_MODEM_FLOW));
+        }
         if (strstr(Modem_CommandBuffer, ("DL")) != NULL)
         {
             Modem_Dialout("",1);
             Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
-        }*/
+        }
 
         char *currentS;
         char temp[100];
@@ -1623,20 +1651,22 @@ void Modem_Dialout(char* host, int redial)
         }
     }
     else {
-      hostname = String(host);
-    }
-
-    if (strlen(host) == 0)
-    {
-        Modem_PrintERROR();
-        return;
-    }
-
-    if ((index = strstr(host, ":")) != NULL)
-    {
-        index[0] = '\0';
-        hostname = String(host);
-        port = atoi(index + 1);
+        if (strlen(host) == 0)
+        {
+            Modem_PrintERROR();
+            return;
+        }    
+        
+        if ((index = strstr(host, ":")) != NULL)
+        {
+            index[0] = '\0';
+            hostname = String(host);
+            port = atoi(index + 1);
+        }
+        else
+        {
+            hostname = String(host);
+        }
     }
 
     /*if (hostname == F("5551212"))
@@ -1645,8 +1675,8 @@ void Modem_Dialout(char* host, int redial)
         return;
     }*/
 
-    //lastHost = hostname;
-    //lastPort = port;
+    lastHost = hostname;
+    lastPort = port;
 
     Connect(hostname, port, false);
 }
