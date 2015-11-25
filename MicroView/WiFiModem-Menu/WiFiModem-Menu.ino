@@ -6,7 +6,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-#define HAYES
+//#define HAYES
 //#define ENABLE_C64_DCD
 #include <MicroView.h>
 #include <elapsedMillis.h>
@@ -22,7 +22,8 @@
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
-#define BAUD_RATE 2400
+int BAUD_RATE=2400;
+//#define BAUD_RATE 2400
 #define WiFly_BAUD_RATE 2400
 #define MIN_FLOW_CONTROL_RATE 4800  // If BAUD rate is this speed or higher, RTS/CTS flow control is enabled.
 
@@ -62,6 +63,7 @@ boolean Modem_flowControl = false;   // Should this be a menu option for non-Hay
 // EEPROM Addresses
 #define ADDR_PETSCII            0
 #define ADDR_AUTOSTART          1
+#define ADDR_BAUD               2
 #define ADDR_MODEM_ECHO         10
 #define ADDR_MODEM_FLOW         11
 #define ADDR_MODEM_VERBOSE      12
@@ -154,11 +156,6 @@ int main(void) {
         Modem_Recovery++;
         EEPROM.write(ADDR_RECOVERY, Modem_Recovery);        
 #endif  // HAYES
-    
-        C64Serial.begin(BAUD_RATE);
-        WifiSerial.begin(WiFly_BAUD_RATE);
-    
-        C64Serial.setTimeout(1000);
 
         // Always setup pins for flow control
         pinModeFast(C64_RTS, INPUT);
@@ -172,7 +169,29 @@ int main(void) {
         digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
     
         DisplayBoth(F("Wi-Fi Init..."));
-    
+
+        WifiSerial.begin(WiFly_BAUD_RATE);
+
+#ifndef HAYES
+        BAUD_RATE = EEPROM.read(ADDR_BAUD);
+        switch (BAUD_RATE)
+        {
+          case 0:
+          BAUD_RATE = 2400;
+          break;
+
+          case 1:
+          BAUD_RATE = 9600;
+          break;
+
+          default:
+          BAUD_RATE = 2400;
+        }
+#endif  
+
+        C64Serial.begin(BAUD_RATE);
+        C64Serial.setTimeout(1000);
+
         boolean ok = wifly.begin(&WifiSerial, &C64Serial);
     
         if (ok)
@@ -187,6 +206,13 @@ int main(void) {
     
         // Enable DNS caching, TCP retry, TCP_NODELAY, TCP connection status
             wifly.setIpFlags(16 && 4 && 2 && 1);
+
+#ifndef HAYES       
+        if (BAUD_RATE == 9600) {
+            delay(1000);
+            setBaudWiFi(9600,0);
+        }
+#endif  
     
         wifly.close();
 
@@ -279,8 +305,9 @@ void Configuration()
         C64Println(F("1. Display Current Configuration"));
         C64Println(F("2. Change SSID"));
         C64Println(F("3. Autostart Options"));
-        C64Println(F("4. Direct Terminal Mode (Debug)"));
-        C64Println(F("5. Return to Main Menu"));
+        C64Println(F("4. Toggle 2400/9600 baud"));
+        C64Println(F("5. Direct Terminal Mode (Debug)"));
+        C64Println(F("6. Return to Main Menu"));
         C64Println();
         C64Print(F("Select: "));
 
@@ -298,10 +325,15 @@ void Configuration()
         case '3': ConfigureAutoStart();
             break;
 
-        case '4': RawTerminalMode();
+#ifndef HAYES
+        case '4': ConfigureBaud();
+            break;
+#endif
+
+        case '5': RawTerminalMode();
             return;
 
-        case '5': return;
+        case '6': return;
 
         case 8:
             SetPETSCIIMode(false);
@@ -805,7 +837,8 @@ void TerminalMode()
     
     while (wifly.available() != -1) // -1 means closed
     {
-        if (baudMismatch) {   // Assumes host is slower than WiFly
+        if (0) {   // Assumes host is slower than WiFly
+        //if (baudMismatch) {   // Assumes host is slower than WiFly
             while (wifly.available() > 0)
             {
                 digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
@@ -1830,7 +1863,11 @@ void Modem_LoadDefaults(void)
     Modem_S0_AutoAnswer = false;
     Modem_S2_EscapeCharacter = '+';
     Modem_isDcdInverted = false;
+#ifndef HAYES
+    BAUD_RATE = 2400;
+    setBaud(2400,0);
     delay(2000);
+#endif
 }
 
 // Save settings to profile.  Future:  profile #1 using ADDR_MODEM_ECHO1 etc.
@@ -1860,6 +1897,58 @@ void Modem_Load_Settings(byte profile_num)
 
 #endif  // HAYES
 
+#ifndef HAYES
+void ConfigureBaud()
+{
+  if (BAUD_RATE == 2400)
+  {
+      setBaud(9600,true);
+  }
+  else
+  {
+      setBaud(2400,true);
+  }
+}
+
+
+void setBaud(int newBaudRate, boolean pause) {
+  char temp[20];
+  BAUD_RATE = newBaudRate;
+  sprintf(temp,"New baud: %d",BAUD_RATE);
+  C64Println(temp);
+  C64Serial.flush();
+  delay(2);
+  C64Serial.end();
+  C64Serial.begin(BAUD_RATE);
+  C64Serial.setTimeout(1000);
+
+  WifiSerial.flush();
+  delay(2);
+  wifly.setBaud(newBaudRate);     // Uses set uart instant so no save and reboot needed
+  delay(1000);
+  WifiSerial.end();
+  WifiSerial.begin(newBaudRate);
+  
+  if (pause)
+    delay(5000);  // Delay 5 seconds so user has time to switch to help prevent junk...
+  //baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
+
+  if (BAUD_RATE == 2400)
+    EEPROM.write(ADDR_BAUD, 0);  // Save  
+  else
+    EEPROM.write(ADDR_BAUD, 1);  // Save  
+}
+
+void setBaudWiFi(int newBaudRate, boolean pause) {
+  WifiSerial.flush();
+  delay(2);
+  wifly.setBaud(newBaudRate);     // Uses set uart instant so no save and reboot needed
+  delay(1000);
+  WifiSerial.end();
+  WifiSerial.begin(newBaudRate);
+}
+
+#endif HAYES
 
 int freeRam () 
 {
