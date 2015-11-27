@@ -24,7 +24,8 @@
 
 int BAUD_RATE=2400;
 //#define BAUD_RATE 2400
-#define WiFly_BAUD_RATE 2400
+int WiFly_BAUD_RATE=2400;
+//#define WiFly_BAUD_RATE 2400
 #define MIN_FLOW_CONTROL_RATE 4800  // If BAUD rate is this speed or higher, RTS/CTS flow control is enabled.
 
 // Wifi
@@ -56,25 +57,14 @@ int lastPort = 23;
 // Misc Values
 #define TIMEDOUT  -1
 boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
-#ifndef HAYES
-boolean Modem_flowControl = false;   // Should this be a menu option for non-Hayes mode?
-#endif
+boolean Modem_flowControl = false;   // for &K setting.  Not currently stored in EEPROM
 
 // EEPROM Addresses
-#define ADDR_PETSCII            0
-#define ADDR_AUTOSTART          1
-#define ADDR_BAUD               2
-#define ADDR_MODEM_ECHO         10
-#define ADDR_MODEM_FLOW         11
-#define ADDR_MODEM_VERBOSE      12
-#define ADDR_MODEM_QUIET        13
-#define ADDR_MODEM_S0_AUTOANS   14
-#define ADDR_MODEM_S2_ESCAPE    15
-#define ADDR_MODEM_DCD_INVERTED 16
-
-#define ADDR_RECOVERY           254
-#define ADDR_FIRST_TIME_CHECK   255
-
+#define ADDR_PETSCII       0
+#define ADDR_AUTOSTART     1
+#define ADDR_BAUD_LO       2
+#define ADDR_BAUD_HI       3
+//#define ADDR_MODEM_ECHO    10
 
 // PETSCII state
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
@@ -94,32 +84,6 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 
 #endif
 
-#ifdef HAYES
-// ----------------------------------------------------------
-// Simple Hayes Emulation
-// Portions of this code are adapted from Payton Byrd's Hayesduino - thanks!
-
-boolean Modem_isCommandMode = true;
-boolean Modem_isConnected = false;
-boolean Modem_isRinging = false;
-boolean Modem_Echo = false;
-boolean Modem_flowControl = false;
-boolean Modem_VerboseResponses = true;
-boolean Modem_QuietMode = false;
-boolean Modem_isDcdInverted = false;
-
-boolean Modem_S0_AutoAnswer = false;
-char    Modem_S2_EscapeCharacter = '+';
-
-byte    Modem_Recovery = 0;
-
-#define COMMAND_BUFFER_SIZE  81
-char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
-char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
-
-int Modem_EscapeCount = 0;
-#endif
-
 byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
 
 // ----------------------------------------------------------
@@ -127,35 +91,15 @@ byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
 
 int main(void) {
     init();
-    {        
+    {
         uView.begin(); // begin of MicroView
         uView.setFontType(0);
         uView.clear(ALL); // erase hardware memory inside the OLED controller
-
-#ifdef HAYES
-        if (EEPROM.read(ADDR_FIRST_TIME_CHECK) != 222) {
-            // First time - reset to defaults
-            Modem_LoadDefaults();
-            Modem_Save_Settings(0);
-            EEPROM.write(ADDR_FIRST_TIME_CHECK, 222);
-            EEPROM.write(ADDR_RECOVERY, 0);
-        }
-        else
-        {
-            Modem_Load_Settings(0);
-        }
-
-        Modem_Recovery = EEPROM.read(ADDR_RECOVERY);
-        if (Modem_Recovery > 2)   // 2 = 3 times
-        {
-            Modem_LoadDefaults();
-            Modem_Save_Settings(0);
-            delay(1000);
-            EEPROM.write(ADDR_RECOVERY, 0);
-        }
-        Modem_Recovery++;
-        EEPROM.write(ADDR_RECOVERY, Modem_Recovery);        
-#endif  // HAYES
+    
+        C64Serial.begin(BAUD_RATE);
+        WifiSerial.begin(WiFly_BAUD_RATE);
+    
+        C64Serial.setTimeout(1000);
 
         // Always setup pins for flow control
         pinModeFast(C64_RTS, INPUT);
@@ -167,30 +111,17 @@ int main(void) {
         // Force CTS to defaults on both sides to start, so data can get through
         digitalWriteFast(WIFI_CTS, LOW);
         digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
-    
-        DisplayBoth(F("Wi-Fi Init..."));
-
+       
         WifiSerial.begin(WiFly_BAUD_RATE);
 
-#ifndef HAYES
-        BAUD_RATE = EEPROM.read(ADDR_BAUD);
-        switch (BAUD_RATE)
-        {
-          case 0:
-          BAUD_RATE = 2400;
-          break;
-
-          case 1:
-          BAUD_RATE = 9600;
-          break;
-
-          default:
-          BAUD_RATE = 2400;
-        }
-#endif  
+        BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
+        if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 9600 && BAUD_RATE != 38400)
+            BAUD_RATE = 2400;
 
         C64Serial.begin(BAUD_RATE);
-        C64Serial.setTimeout(1000);
+
+        delay(1000);
+        DisplayBoth(F("Wi-Fi Init..."));
 
         boolean ok = wifly.begin(&WifiSerial, &C64Serial);
     
@@ -206,22 +137,23 @@ int main(void) {
     
         // Enable DNS caching, TCP retry, TCP_NODELAY, TCP connection status
             wifly.setIpFlags(16 && 4 && 2 && 1);
-
-#ifndef HAYES       
-        if (BAUD_RATE == 9600) {
-            delay(1000);
-            setBaudWiFi(9600,0);
-        }
-#endif  
     
+        if (BAUD_RATE != 2400) {
+            delay(1000);
+            if(BAUD_RATE == 1200)
+                setBaudWiFi(2400);
+            else
+                setBaudWiFi(BAUD_RATE);
+        }
+        baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
+      
         wifly.close();
 
 #ifdef ENABLE_C64_DCD
         digitalWriteFast(C64_DCD, true);    // true = no carrier
 #endif    
-        EEPROM.write(ADDR_RECOVERY, 0);   // We made it to the menu so user is not trying to reset to defaults..
         HandleAutoStart();
-
+    
         C64Println();
 #ifdef HAYES
         C64Println(F("Commodore Wi-Fi Modem Hayes"));
@@ -305,7 +237,7 @@ void Configuration()
         C64Println(F("1. Display Current Configuration"));
         C64Println(F("2. Change SSID"));
         C64Println(F("3. Autostart Options"));
-        C64Println(F("4. Toggle 2400/9600 baud"));
+        C64Println(F("4. Change baud rate"));
         C64Println(F("5. Direct Terminal Mode (Debug)"));
         C64Println(F("6. Return to Main Menu"));
         C64Println();
@@ -325,10 +257,8 @@ void Configuration()
         case '3': ConfigureAutoStart();
             break;
 
-#ifndef HAYES
         case '4': ConfigureBaud();
             break;
-#endif
 
         case '5': RawTerminalMode();
             return;
@@ -460,14 +390,6 @@ void DisplayP(const char *message)
     uView.display();
 }
 
-void DisplayInt(int message)
-{
-    uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
-    uView.setCursor(0, 0);
-    uView.println(message);
-    uView.display();
-}
-
 void DisplayBoth(String message)
 {
     C64Println(message);
@@ -499,19 +421,9 @@ void C64Print(String message)
     }
 }
 
-void C64PrintInt(int message)
-{
-    C64Serial.print(message);
-}
 void C64Println(String message)
 {
     C64Print(message);
-    C64Serial.println();
-}
-
-void C64PrintIntln(int message)
-{
-    C64PrintInt(message);
     C64Serial.println();
 }
 
@@ -837,8 +749,8 @@ void TerminalMode()
     
     while (wifly.available() != -1) // -1 means closed
     {
-        if (0) {   // Assumes host is slower than WiFly
-        //if (baudMismatch) {   // Assumes host is slower than WiFly
+        //if (1) {   // Assumes host is slower than WiFly
+        if (baudMismatch) {   // Assumes host is slower than WiFly
             while (wifly.available() > 0)
             {
                 digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
@@ -855,14 +767,21 @@ void TerminalMode()
                 // Check that C64 is ready to receive
                 while (digitalReadFast(C64_RTS) == LOW);   // If not...  C64 RTS and CTS are inverted.
                 C64Serial.write(buffer[i]);
+
+                while (wifly.available() > 0)
+                {
+                    DoFlowControl();
+                    C64Serial.write(wifly.read());
+                }
             }
 
+            /*
             // Only used for displaying max buffer size on Microview for testing
             if (max_buffer_size_reached < buffer_index)
                 max_buffer_size_reached = buffer_index;
             char message[20];
             sprintf_P(message, PSTR("Buf: %d"), max_buffer_size_reached);
-            Display(message);
+            Display(message);*/
             
             // Show largest buffer size on Microview
             // 4800/9600 = 3
@@ -1220,6 +1139,26 @@ void HandleAutoStart()
 }
 
 #ifdef HAYES
+// ----------------------------------------------------------
+// Simple Hayes Emulation
+// Portions of this code are adapted from Payton Byrd's Hayesduino - thanks!
+
+boolean Modem_isCommandMode = true;
+boolean Modem_isConnected = false;
+boolean Modem_isRinging = false;
+//boolean Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
+boolean Modem_EchoOn = true;
+boolean Modem_VerboseResponses = true;
+boolean Modem_QuietMode = false;
+boolean Modem_isDcdInverted = false;
+boolean Modem_S0_AutoAnswer = false;
+char    Modem_S2_EscapeCharacter = '+';
+
+#define COMMAND_BUFFER_SIZE  81
+char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
+char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
+
+int Modem_EscapeCount = 0;
 
 void HayesEmulationMode()
 {
@@ -1235,8 +1174,7 @@ void HayesEmulationMode()
 
     Modem_EscapeCount = 0;
 
-    //Modem_LoadDefaults();
-    Modem_Load_Settings(0);
+    Modem_LoadDefaults();
     Modem_ResetCommandBuffer();
 
     C64Println();
@@ -1279,6 +1217,22 @@ void Modem_ResetCommandBuffer()
     memset(Modem_CommandBuffer, 0, COMMAND_BUFFER_SIZE);
 }
 
+
+void Modem_LoadDefaults(void)
+{
+    Modem_isCommandMode = true;
+    Modem_isConnected = false;
+    Modem_isRinging = false;
+    Modem_EchoOn = true;
+    //Modem_SetEcho(true);
+    Modem_VerboseResponses = true;
+    Modem_QuietMode = false;
+    Modem_S0_AutoAnswer = false;
+    Modem_S2_EscapeCharacter = '+';
+    Modem_isDcdInverted = false;
+}
+
+
 int Modem_ToggleCarrier(boolean isHigh)
 {
     int result = 0; //_isDcdInverted ? (isHigh ? LOW : HIGH) : (isHigh ? HIGH : LOW);
@@ -1315,6 +1269,13 @@ void Modem_Disconnect()
 
     digitalWriteFast(C64_DTR, Modem_ToggleCarrier(false));
 }
+
+/*void Modem_SetEcho(boolean on)
+{
+    Modem_EchoOn = on;
+//    EEPROM.write(ADDR_MODEM_ECHO, Modem_EchoOn);  // Save
+}*/
+
 
 // Validate and handle AT sequence  (A/ was handled already)
 void Modem_ProcessCommandBuffer()
@@ -1356,8 +1317,7 @@ void Modem_ProcessCommandBuffer()
 
     if (strcmp(Modem_CommandBuffer, ("ATZ")) == 0)
     {
-        //Modem_LoadDefaults();
-        Modem_Load_Settings(0);
+        Modem_LoadDefaults();
         Modem_PrintOK();
     }
     else if (strcmp(Modem_CommandBuffer, ("ATI")) == 0)
@@ -1414,15 +1374,12 @@ void Modem_ProcessCommandBuffer()
     {
         if (strstr(Modem_CommandBuffer, ("E0")) != NULL)
         {
-            Modem_Echo = false;
+            Modem_EchoOn = false;
         }
+
         if (strstr(Modem_CommandBuffer, ("E1")) != NULL)
         {
-            Modem_Echo = true;
-        }
-        if (strstr(Modem_CommandBuffer, ("E?")) != NULL)
-        {
-            C64PrintIntln(Modem_Echo);
+            Modem_EchoOn = true;
         }
 
         if (strstr(Modem_CommandBuffer, ("Q0")) != NULL)
@@ -1430,28 +1387,22 @@ void Modem_ProcessCommandBuffer()
             Modem_VerboseResponses = false;
             Modem_QuietMode = false;
         }
+
         if (strstr(Modem_CommandBuffer, ("Q1")) != NULL)
         {
             Modem_QuietMode = true;
-        }
-        if (strstr(Modem_CommandBuffer, ("Q?")) != NULL)
-        {
-            C64PrintIntln(Modem_QuietMode);
         }
 
         if (strstr(Modem_CommandBuffer, ("V0")) != NULL)
         {
             Modem_VerboseResponses = false;
         }
+
         if (strstr(Modem_CommandBuffer, ("V1")) != NULL)
         {
             Modem_VerboseResponses = true;
         }
-        if (strstr(Modem_CommandBuffer, ("V?")) != NULL)
-        {
-            C64PrintIntln(Modem_VerboseResponses);
-        }
-        
+
         if (strstr(Modem_CommandBuffer, ("X0")) != NULL)
         {
             // TODO
@@ -1460,35 +1411,14 @@ void Modem_ProcessCommandBuffer()
         {
             // TODO
         }
-        if (strstr(Modem_CommandBuffer, ("X?")) != NULL)
-        {
-            // TODO
-        }
-        
         if (strstr(Modem_CommandBuffer, ("&K0")) != NULL)
         {
             Modem_flowControl = false;
-            //EEPROM.write(ADDR_MODEM_FLOW, 0);
         }
         if (strstr(Modem_CommandBuffer, ("&K1")) != NULL)
         {
             Modem_flowControl = true;
-            //EEPROM.write(ADDR_MODEM_FLOW, 1);
         }
-        if (strstr(Modem_CommandBuffer, ("&K?")) != NULL)
-        {
-            C64PrintIntln(Modem_flowControl);
-        }
-        
-        if (strstr(Modem_CommandBuffer, ("&W0")) != NULL)
-        {
-            Modem_Save_Settings(0);
-        }
-        
-        if (strstr(Modem_CommandBuffer, ("Y0")) != NULL)
-        {
-            Modem_Load_Settings(0);
-        }       
         
         if (strstr(Modem_CommandBuffer, ("DL")) != NULL)
         {
@@ -1619,7 +1549,7 @@ void Modem_ProcessData()
             //char inbound = toupper(_serial->read());
             char inbound = C64Serial.read();
 
-            if (Modem_Echo)
+            if (Modem_EchoOn)
             {
                 if (!Modem_flowControl) 
                     delay(100/(BAUD_RATE/2400));         // Slow down command mode to prevent garbage if flow control 
@@ -1732,20 +1662,15 @@ void Modem_Dialout(char* host, int redial)
         {
             Modem_PrintERROR();
             return;
-        }    
-        
+        }
+    
         if ((index = strstr(host, ":")) != NULL)
         {
             index[0] = '\0';
             hostname = String(host);
             port = atoi(index + 1);
         }
-        else
-        {
-            hostname = String(host);
-        }
     }
-
     /*if (hostname == F("5551212"))
     {
         QuantumLinkReloaded();
@@ -1848,56 +1773,7 @@ Serial.end();
 Serial.begin(115200);
 */
 
-#ifdef HAYES
-
-void Modem_LoadDefaults(void)
-{
-    Display(F("Setting defaults"));
-    Modem_isCommandMode = true;
-    Modem_isConnected = false;
-    Modem_isRinging = false;
-    Modem_Echo = true;
-    Modem_flowControl = false;
-    Modem_VerboseResponses = true;
-    Modem_QuietMode = false;
-    Modem_S0_AutoAnswer = false;
-    Modem_S2_EscapeCharacter = '+';
-    Modem_isDcdInverted = false;
-#ifndef HAYES
-    BAUD_RATE = 2400;
-    setBaud(2400,0);
-    delay(2000);
-#endif
-}
-
-// Save settings to profile.  Future:  profile #1 using ADDR_MODEM_ECHO1 etc.
-void Modem_Save_Settings(byte profile_num)
-{
-    EEPROM.write(ADDR_MODEM_ECHO, Modem_Echo);    
-    EEPROM.write(ADDR_MODEM_FLOW, Modem_flowControl);
-    EEPROM.write(ADDR_MODEM_VERBOSE, Modem_VerboseResponses);
-    EEPROM.write(ADDR_MODEM_QUIET, Modem_QuietMode);
-    EEPROM.write(ADDR_MODEM_S0_AUTOANS, Modem_S0_AutoAnswer);
-    EEPROM.write(ADDR_MODEM_S2_ESCAPE, Modem_S2_EscapeCharacter);
-    EEPROM.write(ADDR_MODEM_DCD_INVERTED, Modem_isDcdInverted);
-}
-
-void Modem_Load_Settings(byte profile_num)
-// Load settings from profile.  Future:  profile #1 using ADDR_MODEM_ECHO1 etc.
-{
-    Modem_Echo = EEPROM.read(ADDR_MODEM_ECHO);
-    Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
-    Modem_VerboseResponses = EEPROM.read(ADDR_MODEM_VERBOSE);
-    Modem_QuietMode = EEPROM.read(ADDR_MODEM_QUIET);
-    Modem_S0_AutoAnswer = EEPROM.read(ADDR_MODEM_S0_AUTOANS);
-    Modem_S2_EscapeCharacter = EEPROM.read(ADDR_MODEM_S2_ESCAPE);
-    Modem_isDcdInverted = EEPROM.read(ADDR_MODEM_DCD_INVERTED);
-}
-
-
-#endif  // HAYES
-
-#ifndef HAYES
+/*
 void ConfigureBaud()
 {
   if (BAUD_RATE == 2400)
@@ -1908,8 +1784,51 @@ void ConfigureBaud()
   {
       setBaud(2400,true);
   }
-}
+}*/
 
+void ConfigureBaud()
+{
+    while (true)
+    {
+        C64Println();
+        C64Print(F("Baud Rate Menu (Current: "));
+        C64Serial.print(BAUD_RATE);
+        C64Println(F(")"));
+        C64Println();
+        C64Println(F("1. 1200"));
+        C64Println(F("2. 2400"));
+        C64Println(F("3. 9600"));
+        C64Println(F("4. Return to Main Menu"));
+
+        C64Println();
+        C64Print(F("Select: "));
+
+        int option = ReadByte(C64Serial);
+        C64Serial.println((char)option);
+
+        switch (option)
+        {
+        case '1': setBaud(1200, true);
+            break;
+        case '2': setBaud(2400, true);
+            break;
+        case '3': setBaud(9600, true);
+            break;
+        case '4': return;
+
+        case '\n':
+        case '\r':
+        case ' ':
+            continue;
+
+        default: C64Println(F("Unknown option, try again"));
+            continue;
+        }
+
+        EEPROM.write(ADDR_AUTOSTART, autostart_mode);  // Save
+        C64Println(F("Saved"));
+    }
+}
 
 void setBaud(int newBaudRate, boolean pause) {
   char temp[20];
@@ -1922,24 +1841,27 @@ void setBaud(int newBaudRate, boolean pause) {
   C64Serial.begin(BAUD_RATE);
   C64Serial.setTimeout(1000);
 
-  WifiSerial.flush();
-  delay(2);
-  wifly.setBaud(newBaudRate);     // Uses set uart instant so no save and reboot needed
-  delay(1000);
-  WifiSerial.end();
-  WifiSerial.begin(newBaudRate);
-  
+  if(BAUD_RATE == 1200)
+    setBaudWiFi(2400);
+  else
+    setBaudWiFi(BAUD_RATE);
+
   if (pause)
     delay(5000);  // Delay 5 seconds so user has time to switch to help prevent junk...
-  //baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 
-  if (BAUD_RATE == 2400)
-    EEPROM.write(ADDR_BAUD, 0);  // Save  
-  else
-    EEPROM.write(ADDR_BAUD, 1);  // Save  
+  byte a = newBaudRate/256;
+  byte b = newBaudRate % 256;
+
+  // Let's not waste writes..
+  if (EEPROM.read(ADDR_BAUD_LO) != a)
+      EEPROM.write(ADDR_BAUD_LO, a);
+  if (EEPROM.read(ADDR_BAUD_HI) != b)
+      EEPROM.write(ADDR_BAUD_HI, b);
 }
 
-void setBaudWiFi(int newBaudRate, boolean pause) {
+void setBaudWiFi(int newBaudRate) {
+  baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
+  WiFly_BAUD_RATE = newBaudRate;
   WifiSerial.flush();
   delay(2);
   wifly.setBaud(newBaudRate);     // Uses set uart instant so no save and reboot needed
@@ -1947,8 +1869,6 @@ void setBaudWiFi(int newBaudRate, boolean pause) {
   WifiSerial.end();
   WifiSerial.begin(newBaudRate);
 }
-
-#endif HAYES
 
 int freeRam () 
 {
