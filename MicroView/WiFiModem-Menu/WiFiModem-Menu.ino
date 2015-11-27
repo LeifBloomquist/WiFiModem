@@ -89,17 +89,60 @@ byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
 // ----------------------------------------------------------
 // Arduino Setup Function
 
-int main(void) {
-    init();
-    {
+void setup()
+{
         uView.begin(); // begin of MicroView
         uView.setFontType(0);
         uView.clear(ALL); // erase hardware memory inside the OLED controller
     
+    BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
+    if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200)
+        BAUD_RATE = 2400;
+
+    //
+    // Baud rate detection
+    //
+    pinMode (C64_RxD, INPUT);
+    digitalWrite (C64_RxD, HIGH);
+
+    Display("Baud\ndetection");
+
+    long detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
+    // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
+    // by having sending circuit send "U" characters.
+    // Returns 0 if none or under 1200 baud
+
+    char temp[20];
+    sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
+    Display(temp);
+
+    delay(3000);
+
+    if (detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 || detectedBaudRate == 9600 || detectedBaudRate == 19200) {
+        BAUD_RATE = detectedBaudRate;
+
+        byte a = BAUD_RATE / 256;
+        byte b = BAUD_RATE % 256;
+
+        // Let's not waste writes..
+        if (EEPROM.read(ADDR_BAUD_LO) != a)
+            EEPROM.write(ADDR_BAUD_LO, a);
+        if (EEPROM.read(ADDR_BAUD_HI) != b)
+            EEPROM.write(ADDR_BAUD_HI, b);
+    }
+
+    //setBaud(BAUD_RATE, false, true);
+
+    //
+    // Baud rate detection end
+    //
+
         C64Serial.begin(BAUD_RATE);
         WifiSerial.begin(WiFly_BAUD_RATE);
     
         C64Serial.setTimeout(1000);
+
+        baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 
         // Always setup pins for flow control
         pinModeFast(C64_RTS, INPUT);
@@ -112,15 +155,17 @@ int main(void) {
         digitalWriteFast(WIFI_CTS, LOW);
         digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
        
-        WifiSerial.begin(WiFly_BAUD_RATE);
+        //WifiSerial.begin(WiFly_BAUD_RATE);
 
+  /*
         BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
         if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 9600 && BAUD_RATE != 38400)
             BAUD_RATE = 2400;
+  */
 
-        C64Serial.begin(BAUD_RATE);
+        //C64Serial.begin(BAUD_RATE);
 
-        delay(1000);
+        //delay(1000);
         DisplayBoth(F("Wi-Fi Init..."));
 
         boolean ok = wifly.begin(&WifiSerial, &C64Serial);
@@ -161,7 +206,11 @@ int main(void) {
         C64Println(F("Commodore Wi-Fi Modem"));
 #endif // HAYES
         ShowInfo(true);
-    }
+
+}
+
+void loop()
+{
     while (1)
     {
         Display(F("READY."));
@@ -237,9 +286,9 @@ void Configuration()
         C64Println(F("1. Display Current Configuration"));
         C64Println(F("2. Change SSID"));
         C64Println(F("3. Autostart Options"));
-        C64Println(F("4. Change baud rate"));
-        C64Println(F("5. Direct Terminal Mode (Debug)"));
-        C64Println(F("6. Return to Main Menu"));
+        //C64Println(F("4. Change baud rate"));
+        C64Println(F("4. Direct Terminal Mode (Debug)"));
+        C64Println(F("5. Return to Main Menu"));
         C64Println();
         C64Print(F("Select: "));
 
@@ -257,13 +306,13 @@ void Configuration()
         case '3': ConfigureAutoStart();
             break;
 
-        case '4': ConfigureBaud();
-            break;
+/*      case '4': ConfigureBaud();
+            break;*/
 
-        case '5': RawTerminalMode();
+        case '4': RawTerminalMode();
             return;
 
-        case '6': return;
+        case '5': return;
 
         case 8:
             SetPETSCIIMode(false);
@@ -482,7 +531,8 @@ void ShowPETSCIIMode()
 void SetPETSCIIMode(boolean mode)
 {
     petscii_mode = mode;
-    EEPROM.write(ADDR_PETSCII, petscii_mode);
+    if (EEPROM.read(ADDR_PETSCII) != petscii_mode)
+        EEPROM.write(ADDR_PETSCII, petscii_mode);
 }
 
 // ----------------------------------------------------------
@@ -765,13 +815,12 @@ void TerminalMode()
             for(int i=0; i<buffer_index; i++) {
                 // Always do flow control if baudMismatch
                 // Check that C64 is ready to receive
-                while (digitalReadFast(C64_RTS) == LOW);   // If not...  C64 RTS and CTS are inverted.
+            //while (digitalReadFast(C64_RTS) == LOW);   // If not...  C64 RTS and CTS are inverted.
                 C64Serial.write(buffer[i]);
 
-                while (wifly.available() > 0)
+            while (C64Serial.available() > 0)
                 {
-                    DoFlowControl();
-                    C64Serial.write(wifly.read());
+            wifly.write(C64Serial.read());
                 }
             }
 
@@ -1065,7 +1114,8 @@ void ConfigureAutoStart()
             continue;
         }
 
-        EEPROM.write(ADDR_AUTOSTART, autostart_mode);  // Save
+        if (EEPROM.read(ADDR_AUTOSTART) != autostart_mode)
+            EEPROM.write(ADDR_AUTOSTART, autostart_mode);  // Save
         C64Println(F("Saved"));
     }
 }
@@ -1094,7 +1144,8 @@ void HandleAutoStart()
 //            break;
 
         default: // Invalid - on first startup or if corrupted.  Clear silently and continue to menu.
-            EEPROM.write(ADDR_AUTOSTART, AUTO_NONE);
+        if (EEPROM.read(ADDR_AUTOSTART) != AUTO_NONE)
+            EEPROM.write(ADDR_AUTOSTART, AUTO_NONE);  // Save
             autostart_mode = AUTO_NONE;
             return;
     }
@@ -1327,16 +1378,9 @@ void Modem_ProcessCommandBuffer()
     }
     else if (strcmp(Modem_CommandBuffer, ("AT&F")) == 0)
     {
-        if (strcmp(Modem_LastCommandBuffer, ("AT&F")) == 0)
-        {
             Modem_LoadDefaults();
             Modem_PrintOK();
         }
-        else
-        {
-            C64Println(F("Send command again to verify")); 
-        }
-    }
     else if (strcmp(Modem_CommandBuffer, ("ATA")) == 0)
     {
         Modem_Answer();    
@@ -1420,12 +1464,6 @@ void Modem_ProcessCommandBuffer()
             Modem_flowControl = true;
         }
         
-        if (strstr(Modem_CommandBuffer, ("DL")) != NULL)
-        {
-            Modem_Dialout("",1);
-            Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
-        }
-
         char *currentS;
         char temp[100];
 
@@ -1552,8 +1590,8 @@ void Modem_ProcessData()
             if (Modem_EchoOn)
             {
                 if (!Modem_flowControl) 
-                    delay(100/(BAUD_RATE/2400));         // Slow down command mode to prevent garbage if flow control 
-                                                         // is disabled.  Doesn't work at 9600.  TODO:  Fix
+                delay(100 / (BAUD_RATE / 2400));     // Slow down command mode to prevent garbage if flow control
+                // is disabled.  Doesn't work at 9600 but flow control should be on at 9600 baud anyways.  TODO:  Fix
                 C64Serial.write(inbound);
             }
 
@@ -1646,18 +1684,6 @@ void Modem_Dialout(char* host, int redial)
     uint16_t port = 23;
     String hostname;
 
-    if (redial) {
-        if (lastHost.length() > 0)
-        {
-            hostname = lastHost;
-            port = lastPort;
-        }
-        else {
-            Modem_PrintERROR();
-            return;
-        }
-    }
-    else {
         if (strlen(host) == 0)
         {
             Modem_PrintERROR();
@@ -1670,7 +1696,6 @@ void Modem_Dialout(char* host, int redial)
             hostname = String(host);
             port = atoi(index + 1);
         }
-    }
     /*if (hostname == F("5551212"))
     {
         QuantumLinkReloaded();
@@ -1786,6 +1811,7 @@ void ConfigureBaud()
   }
 }*/
 
+/*
 void ConfigureBaud()
 {
     while (true)
@@ -1828,39 +1854,41 @@ void ConfigureBaud()
         EEPROM.write(ADDR_AUTOSTART, autostart_mode);  // Save
         C64Println(F("Saved"));
     }
-}
+}*/
 
-void setBaud(int newBaudRate, boolean pause) {
-  char temp[20];
-  BAUD_RATE = newBaudRate;
-  sprintf(temp,"New baud: %d",BAUD_RATE);
-  C64Println(temp);
-  C64Serial.flush();
-  delay(2);
-  C64Serial.end();
-  C64Serial.begin(BAUD_RATE);
-  C64Serial.setTimeout(1000);
+/*
+void setBaud(int newBaudRate, boolean pause, boolean setup) {
+    char temp[20];
+    BAUD_RATE = newBaudRate;
+    if (!setup) {
+        sprintf(temp, "New baud: %d", BAUD_RATE);
+    C64Println(temp);
+    C64Serial.flush();
+    delay(2);
+    C64Serial.end();
+    }
+    C64Serial.begin(BAUD_RATE);
+    C64Serial.setTimeout(1000);
 
-  if(BAUD_RATE == 1200)
-    setBaudWiFi(2400);
-  else
-    setBaudWiFi(BAUD_RATE);
+    if(BAUD_RATE == 1200)
+        setBaudWiFi(2400);
+    else
+        setBaudWiFi(BAUD_RATE);
 
-  if (pause)
-    delay(5000);  // Delay 5 seconds so user has time to switch to help prevent junk...
+    if (pause)
+        delay(5000);  // Delay 5 seconds so user has time to switch to help prevent junk...
 
-  byte a = newBaudRate/256;
-  byte b = newBaudRate % 256;
+    byte a = newBaudRate/256;
+    byte b = newBaudRate % 256;
 
-  // Let's not waste writes..
-  if (EEPROM.read(ADDR_BAUD_LO) != a)
-      EEPROM.write(ADDR_BAUD_LO, a);
-  if (EEPROM.read(ADDR_BAUD_HI) != b)
-      EEPROM.write(ADDR_BAUD_HI, b);
-}
+    // Let's not waste writes..
+    if (EEPROM.read(ADDR_BAUD_LO) != a)
+        EEPROM.write(ADDR_BAUD_LO, a);
+    if (EEPROM.read(ADDR_BAUD_HI) != b)
+        EEPROM.write(ADDR_BAUD_HI, b);
+}*/
 
 void setBaudWiFi(int newBaudRate) {
-  baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
   WiFly_BAUD_RATE = newBaudRate;
   WifiSerial.flush();
   delay(2);
@@ -1878,4 +1906,47 @@ int freeRam ()
 }
 
 // EOF!
+long detRate(int recpin)  // function to return valid received baud rate
+// Note that the serial monitor has no 600 baud option and 300 baud
+// doesn't seem to work with version 22 hardware serial library
+{
+    unsigned long timer;
+    timer = millis();
+
+    while (1)
+    {
+      if (millis() - 3000 < timer)
+          return (0);
+      if (digitalRead(recpin) == 0)
+          break;
+    }
+    //while(digitalRead(recpin) == 1 && millis()-3000 < timer){} // wait for low bit to start
+    long baud;
+    long rate = pulseIn(recpin, LOW); // measure zero bit width from character 'U'
+
+    if (rate < 12)
+        baud = 115200;
+    else if (rate < 20)
+        baud = 57600;
+    else if (rate < 29)
+        baud = 38400;
+    else if (rate < 40)
+        baud = 28800;
+    else if (rate < 60)
+        baud = 19200;
+    else if (rate < 80)
+        baud = 14400;
+    else if (rate < 150)
+        baud = 9600;
+    else if (rate < 300)
+        baud = 4800;
+    else if (rate < 600)
+        baud = 2400;
+    else if (rate < 1200)
+        baud = 1200;
+    else
+        baud = 0;
+    return baud;
+}
+
 
