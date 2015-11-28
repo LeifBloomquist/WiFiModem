@@ -84,16 +84,19 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 
 #endif
 
+#ifndef HAYES
 byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
+#endif
 
 // ----------------------------------------------------------
 // Arduino Setup Function
 
-void setup()
+int main(void)
 {
-        uView.begin(); // begin of MicroView
-        uView.setFontType(0);
-        uView.clear(ALL); // erase hardware memory inside the OLED controller
+    init();
+    uView.begin(); // begin of MicroView
+    uView.setFontType(0);
+    uView.clear(ALL); // erase hardware memory inside the OLED controller
     
     BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
     if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200)
@@ -112,8 +115,11 @@ void setup()
     // by having sending circuit send "U" characters.
     // Returns 0 if none or under 1200 baud
 
-    char temp[20];
-    sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
+    //char temp[20];
+    //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
+    //Display(temp);
+    char temp[6];
+    sprintf(temp, "%ld", detectedBaudRate);
     Display(temp);
 
     delay(3000);
@@ -197,7 +203,10 @@ void setup()
 #ifdef ENABLE_C64_DCD
         digitalWriteFast(C64_DCD, true);    // true = no carrier
 #endif    
+
+#ifndef HAYES        
         HandleAutoStart();
+#endif  // HAYES
     
         C64Println();
 #ifdef HAYES
@@ -207,10 +216,6 @@ void setup()
 #endif // HAYES
         ShowInfo(true);
 
-}
-
-void loop()
-{
     while (1)
     {
         Display(F("READY."));
@@ -285,7 +290,9 @@ void Configuration()
         C64Println();
         C64Println(F("1. Display Current Configuration"));
         C64Println(F("2. Change SSID"));
+#ifndef HAYES
         C64Println(F("3. Autostart Options"));
+#endif        
         //C64Println(F("4. Change baud rate"));
         C64Println(F("4. Direct Terminal Mode (Debug)"));
         C64Println(F("5. Return to Main Menu"));
@@ -303,8 +310,10 @@ void Configuration()
         case '2': ChangeSSID();
             break;
 
+#ifndef HAYES
         case '3': ConfigureAutoStart();
             break;
+#endif
 
 /*      case '4': ConfigureBaud();
             break;*/
@@ -1028,6 +1037,15 @@ int ReadByte(Stream& in)
 
 int PeekByte(Stream& in, unsigned int timeout)
 {
+    /*unsigned long timer;
+    timer = millis();
+
+    while (in.available() == 0)
+    {
+      if (millis() - timeout < timer)
+          return TIMEDOUT;
+    }*/
+ 
     elapsedMillis timeElapsed = 0;
 
     while (in.available() == 0)
@@ -1040,6 +1058,7 @@ int PeekByte(Stream& in, unsigned int timeout)
     return in.peek();
 }
 
+#ifndef HAYES
 // ----------------------------------------------------------
 // Autoconnect Handling
 
@@ -1119,7 +1138,9 @@ void ConfigureAutoStart()
         C64Println(F("Saved"));
     }
 }
+#endif // HAYES
 
+#ifndef HAYES
 void HandleAutoStart()
 {
     // Display chosen action
@@ -1188,6 +1209,7 @@ void HandleAutoStart()
             return;
     }
 }
+#endif  // HAYES
 
 #ifdef HAYES
 // ----------------------------------------------------------
@@ -1313,7 +1335,8 @@ void Modem_Disconnect()
     delay(500);
     sprintf_P(temp, PSTR("\n\rNO CARRIER\n\r"));
     DisplayBothP(temp);
-    delay(100);
+    //DisplayBoth(F("\n\rNO CARRIER\n\r"));
+    //delay(100);
 
     if (wifly.available() == -1)
         wifly.close();
@@ -1402,12 +1425,12 @@ void Modem_ProcessCommandBuffer()
         strncmp(Modem_CommandBuffer, ("ATD "), 4) == 0
         )
     {
-        Modem_Dialout(strstr(Modem_CommandBuffer, " ") + 1,0);
+        Modem_Dialout(strstr(Modem_CommandBuffer, " ") + 1);
         Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
     }
     else if (strncmp(Modem_CommandBuffer, ("ATDT"), 4) == 0)
     {
-        Modem_Dialout(strstr(Modem_CommandBuffer, "ATDT") + 4,0);
+        Modem_Dialout(strstr(Modem_CommandBuffer, "ATDT") + 4);
         Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
     }
     else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
@@ -1605,7 +1628,7 @@ void Modem_ProcessData()
             else if (inbound != '\r' && inbound != '\n' && inbound != Modem_S2_EscapeCharacter)
             {
                 if (strlen(Modem_CommandBuffer) >= COMMAND_BUFFER_SIZE) {
-                  Display (F("CMD Buf Overflow"));
+                  //Display (F("CMD Buf Overflow"));
                   Modem_PrintERROR();
                   Modem_ResetCommandBuffer();
                 }
@@ -1678,11 +1701,11 @@ void Modem_Answer()
     Modem_Connected();
 }
 
-void Modem_Dialout(char* host, int redial)
+void Modem_Dialout(char* host)
 {
     char* index;
     uint16_t port = 23;
-    String hostname;
+    String hostname = String(host);
 
         if (strlen(host) == 0)
         {
