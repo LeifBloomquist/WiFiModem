@@ -1,12 +1,12 @@
 /*
     Commodore 64 - MicroView - Wi-Fi Cart
-    Author: Leif Bloomquist
-    With assistance and code from Greg Alekel, Payton Byrd, Craig Bruce
+    Authors: Leif Bloomquist and Alex Burger
+    With assistance and code from Greg Alekel and Payton Byrd
 */
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-//#define HAYES
+#define HAYES
 //#define ENABLE_C64_DCD
 #include <MicroView.h>
 #include <elapsedMillis.h>
@@ -18,7 +18,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.05b1"
+#define VERSION "0.05b2"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -70,19 +70,11 @@ boolean Modem_flowControl = false;   // for &K setting.  Not currently stored in
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 
 // Autoconnect Options
-#ifdef HAYES
 #define AUTO_NONE     0
 #define AUTO_HAYES    1
 #define AUTO_CSERVER  2
-//#define AUTO_QLINK    3
+#define AUTO_QLINK    3
 #define AUTO_CUSTOM   100   // TODO
-#else
-#define AUTO_NONE     0
-#define AUTO_CSERVER  1
-//#define AUTO_QLINK    3
-#define AUTO_CUSTOM   100   // TODO
-
-#endif
 
 #ifndef HAYES
 byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
@@ -210,27 +202,22 @@ int main(void)
     
         C64Println();
 #ifdef HAYES
-        C64Println(F("Commodore Wi-Fi Modem Hayes"));
+        C64Println(F("Commodore Wi-Fi Modem Hayes Emulation"));
+        ShowPETSCIIMode();
+        ShowInfo(true);
+        HayesEmulationMode();
 #else
         C64Println(F("Commodore Wi-Fi Modem"));
-#endif // HAYES
         ShowInfo(true);
 
     while (1)
     {
         Display(F("READY."));
     
-        C64Println();
         ShowPETSCIIMode();
-        C64Println();
-#ifdef HAYES
-        C64Println(F("1. Hayes Emulation Mode"));
-        C64Println(F("2. Configuration"));
-#else
         C64Println(F("1. Telnet to host or BBS"));
         C64Println(F("2. Wait for incoming connection"));
         C64Println(F("3. Configuration"));
-#endif // HAYES
         C64Println();
         C64Print(F("Select: "));
     
@@ -239,7 +226,6 @@ int main(void)
     
         switch (option)
         {
-#ifdef HAYES
         case '1':
             HayesEmulationMode();
             break;
@@ -247,7 +233,7 @@ int main(void)
         case '2':
                 Configuration();
             break;
-#else
+
         case '1':
             DoTelnet();
             break;
@@ -259,8 +245,7 @@ int main(void)
         case '3':
                 Configuration();
             break;
-
-#endif // HAYES   
+ 
         case '\n':
         case '\r':
         case ' ':
@@ -279,8 +264,11 @@ int main(void)
             break;
         }
     }
+
+#endif // HAYES
 }
 
+#ifndef HAYES
 void Configuration()
 {
     while (true)
@@ -290,9 +278,7 @@ void Configuration()
         C64Println();
         C64Println(F("1. Display Current Configuration"));
         C64Println(F("2. Change SSID"));
-#ifndef HAYES
-        C64Println(F("3. Autostart Options"));
-#endif        
+        C64Println(F("3. Autostart Options"));      
         //C64Println(F("4. Change baud rate"));
         C64Println(F("4. Direct Terminal Mode (Debug)"));
         C64Println(F("5. Return to Main Menu"));
@@ -427,6 +413,7 @@ void ChangeSSID()
             }
     }
 }
+#endif  // HAYES
 
 // ----------------------------------------------------------
 // MicroView Display helpers
@@ -512,6 +499,8 @@ inline void C64Println()
 
 void ShowPETSCIIMode()
 {
+    C64Println();
+
     if (petscii_mode)
     {
         char message[] =
@@ -534,8 +523,13 @@ void ShowPETSCIIMode()
         C64Serial.print(F("ASCII Mode"));
     }
 
+#ifndef HAYES
     C64Println(F(" (Del to switch)"));
+#endif  // HAYES
+
+    C64Println();
 }
+
 
 void SetPETSCIIMode(boolean mode)
 {
@@ -543,6 +537,7 @@ void SetPETSCIIMode(boolean mode)
     if (EEPROM.read(ADDR_PETSCII) != petscii_mode)
         EEPROM.write(ADDR_PETSCII, petscii_mode);
 }
+
 
 // ----------------------------------------------------------
 // User Input Handling
