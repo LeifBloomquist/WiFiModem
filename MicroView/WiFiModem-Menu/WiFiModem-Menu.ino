@@ -58,10 +58,13 @@ int lastPort = 23;
 #define TIMEDOUT  -1
 boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 boolean Modem_flowControl = false;   // for &K setting.  Not currently stored in EEPROM
+
 char escapeCount = 0;
 int lastC64input = 0;
 unsigned long escapeTimer = 0;
 boolean escapeReceived = false;
+#define ESCAPE_GUARD_TIME 1000
+
 char autoConnectHost = 0;
 boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connect once..
 #define ADDR_HOST_SIZE     40
@@ -2125,24 +2128,30 @@ String readEEPROMPhoneBook(byte address)
 
 void processC64Inbound()
 {
-    lastC64input = C64Serial.read();
-    if (lastC64input == '+')
-    {
-        if (!escapeTimer)      // First time
+    char C64input = C64Serial.read();
+
+    if ((millis() - ESCAPE_GUARD_TIME) > escapeTimer)
+        {
+
+        if (C64input == '+' && lastC64input != '+')
+        {
+            escapeCount = 1;
+            lastC64input = C64input;
+        }
+        else if (C64input == '+' && lastC64input == '+')
         {
             escapeCount++;
-            escapeTimer = millis();
+            lastC64input = C64input;
         }
         else
         {
-            if ((millis() - 200) > escapeTimer)
-            escapeCount++;
-            escapeTimer = millis();
+            escapeCount = 0;
+            escapeTimer = millis();   // Last time non + data was read
         }
     }
     else
-        escapeCount = 0;
-
+        escapeTimer = millis();   // Last time data was read
+    
     if (escapeCount == 3) {
         Display("Escape!");
         escapeReceived = true;
@@ -2150,7 +2159,7 @@ void processC64Inbound()
         escapeTimer = 0;
     }
       
-    wifly.write(lastC64input);
+    wifly.write(C64input);
     //wifly.write(C64Serial.read());
 }
 
