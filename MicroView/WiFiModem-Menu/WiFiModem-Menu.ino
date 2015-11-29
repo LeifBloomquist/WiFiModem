@@ -58,13 +58,22 @@ int lastPort = 23;
 #define TIMEDOUT  -1
 boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 boolean Modem_flowControl = false;   // for &K setting.  Not currently stored in EEPROM
-
+char escapeCount = 0;
+int lastC64input = 0;
+unsigned long escapeTimer = 0;
+boolean escapeReceived = false;
+char autoConnectHost = 0;
+boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connect once..
+#define ADDR_HOST_SIZE     40
+    
 // EEPROM Addresses
 #define ADDR_PETSCII       0
 #define ADDR_AUTOSTART     1
 #define ADDR_BAUD_LO       2
 #define ADDR_BAUD_HI       3
-//#define ADDR_MODEM_ECHO    10
+#define ADDR_HOST_AUTO    99     // Autostart host number
+#define ADDR_HOSTS         100    // to 299 with ADDR_HOST_SIZE = 40
+//#define ADDR_xxxxx         300
 
 // PETSCII state
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
@@ -122,8 +131,8 @@ int main(void)
         byte a = BAUD_RATE / 256;
         byte b = BAUD_RATE % 256;
 
-        updateEEPROM(ADDR_BAUD_LO,a);
-        updateEEPROM(ADDR_BAUD_HI,b);
+        updateEEPROMByte(ADDR_BAUD_LO,a);
+        updateEEPROMByte(ADDR_BAUD_HI,b);
     }
 
     //setBaud(BAUD_RATE, false, true);
@@ -203,6 +212,7 @@ int main(void)
         C64Println(F("Commodore Wi-Fi Modem Hayes Emulation"));
         ShowPETSCIIMode();
         ShowInfo(true);
+        autoConnectHost = EEPROM.read(ADDR_HOST_AUTO);
         HayesEmulationMode();
 #else
         C64Println(F("Commodore Wi-Fi Modem"));
@@ -393,7 +403,8 @@ void ChangeSSID()
             {
                 C64Println(F("SSID Successfully changed"));
                 wifly.save();
-                wifly.reboot();
+                wifly.leave();
+                wifly.join(20000);    // 20 second timeout
                 return;
             }
             else
@@ -524,7 +535,7 @@ void ShowPETSCIIMode()
 void SetPETSCIIMode(boolean mode)
 {
     petscii_mode = mode;
-    updateEEPROM(ADDR_PETSCII,petscii_mode);
+    updateEEPROMByte(ADDR_PETSCII,petscii_mode);
 }
 
 
@@ -789,6 +800,7 @@ void TerminalMode()
     int buffer_index = 0;
     int buffer_bytes = 0;
     int max_buffer_size_reached = 0;
+
     
     while (wifly.available() != -1) // -1 means closed
     {
@@ -811,9 +823,9 @@ void TerminalMode()
             //while (digitalReadFast(C64_RTS) == LOW);   // If not...  C64 RTS and CTS are inverted.
                 C64Serial.write(buffer[i]);
 
-            while (C64Serial.available() > 0)
+                while (C64Serial.available() > 0)
                 {
-            wifly.write(C64Serial.read());
+                    processC64Inbound();
                 }
             }
 
@@ -849,12 +861,13 @@ void TerminalMode()
 
         while (C64Serial.available() > 0)
         {
-            wifly.write(C64Serial.read());
+            processC64Inbound();
         }
 
         // Alternate check for open/closed state
-        if (!wifly.isConnected())
+        if (!wifly.isConnected() || escapeReceived)
         {
+            escapeReceived = 0;
             break;
         }
     }
@@ -1117,7 +1130,7 @@ void ConfigureAutoStart()
             continue;
         }
 
-        updateEEPROM(ADDR_AUTOSTART,autostart_mode);
+        updateEEPROMByte(ADDR_AUTOSTART,autostart_mode);
         C64Println(F("Saved"));
     }
 }
@@ -1148,7 +1161,7 @@ void HandleAutoStart()
 //            break;
 
         default: // Invalid - on first startup or if corrupted.  Clear silently and continue to menu.
-            updateEEPROM(ADDR_AUTOSTART,AUTO_NONE);
+            updateEEPROMByte(ADDR_AUTOSTART,AUTO_NONE);
             autostart_mode = AUTO_NONE;
             return;
     }
@@ -1395,6 +1408,23 @@ void Modem_ProcessCommandBuffer()
             Modem_PrintERROR();
         }
     }
+    else if (strncmp(Modem_CommandBuffer, ("ATD#"), 4) == 0)
+    {
+        // Phonebook dial
+        char numString[2];
+        numString[0] = Modem_CommandBuffer[4];
+        numString[1] = '\0';
+        char address[ADDR_HOST_SIZE];
+        
+        int phoneBookNumber = atoi(numString);
+        if (phoneBookNumber >= 1 && phoneBookNumber <= 5)
+        {
+            strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+            Modem_Dialout(address);
+        }
+        else
+            Modem_PrintERROR();
+    }
     else if (   // This needs to be revisited
         strncmp(Modem_CommandBuffer, ("ATDT "), 5) == 0 ||
         strncmp(Modem_CommandBuffer, ("ATDP "), 5) == 0 ||
@@ -1440,9 +1470,9 @@ void Modem_ProcessCommandBuffer()
     else if (strncmp(Modem_CommandBuffer, ("AT&KEY="), 7) == 0)
     {
         if (petscii_mode)
-            wifly.setKey(petscii::ToASCII(Modem_LastCommandBuffer + 8).c_str());
+            wifly.setKey(petscii::ToASCII(Modem_LastCommandBuffer + 7).c_str());
         else 
-            wifly.setKey(Modem_LastCommandBuffer + 8);
+            wifly.setKey(Modem_LastCommandBuffer + 7);
         
         Modem_PrintOK();
     }
@@ -1452,6 +1482,63 @@ void Modem_ProcessCommandBuffer()
             Modem_PrintOK();
         else
             Modem_PrintERROR();
+    }
+    // AT&PB1=bbs.jammingsignal.com:23
+    else if (strncmp(Modem_CommandBuffer, ("AT&PBAUTO="), 10) == 0)
+    {
+        char numString[2];
+        numString[0] = Modem_CommandBuffer[10];
+        numString[1] = '\0';
+        
+        int phoneBookNumber = atoi(numString);
+        if (phoneBookNumber >= 0 && phoneBookNumber <= 5)
+        {
+            updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);
+                        
+            Modem_PrintOK();
+        }
+        else
+            Modem_PrintERROR();
+    }    else if (strncmp(Modem_CommandBuffer, ("AT&PB?"), 6) == 0)
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            C64Serial.print(i+1);
+            C64Print(F(":"));
+            C64Println(readEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE)));
+        }
+        C64Println();
+        C64Print(F("Autostart: "));
+        C64Serial.print(EEPROM.read(ADDR_HOST_AUTO));
+        C64Println();
+        Modem_PrintOK();
+    }
+    else if (strncmp(Modem_CommandBuffer, ("AT&PBCLEAR"), 6) == 0)
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
+        }
+        updateEEPROMByte(ADDR_HOST_AUTO, 0);
+        Modem_PrintOK();
+    }
+    else if (strncmp(Modem_CommandBuffer, ("AT&PB"), 5) == 0)
+    {
+        char numString[2];
+        numString[0] = Modem_CommandBuffer[5];
+        numString[1] = '\0';
+        
+        int phoneBookNumber = atoi(numString);
+        if (phoneBookNumber >= 1 && phoneBookNumber <= 5)
+        {
+            updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), Modem_CommandBuffer + 7);
+            Modem_PrintOK();
+        }
+        else
+            Modem_PrintERROR();
+            
+        //Display(readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)));
+        //delay(2000);
     }
     else if (strncmp(Modem_CommandBuffer, ("AT"), 2) == 0)
     {
@@ -1807,6 +1894,16 @@ void Modem_Loop()
     //	digitalWrite(DTE_RTS, LOW);
     //}
 
+    if (autoConnectHost >=1 && autoConnectHost <= 5 && !autoConnectedAtBootAlready)
+    {
+        // Phonebook dial
+        autoConnectedAtBootAlready = 1;
+        char address[ADDR_HOST_SIZE];
+        
+        strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((autoConnectHost-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+        Modem_Dialout(address);
+    }
+
     // Handle all other data arriving on the serial port of the virtual modem.
     Modem_ProcessData();
 
@@ -1988,10 +2085,72 @@ long detRate(int recpin)  // function to return valid received baud rate
     return baud;
 }
 
-void updateEEPROM(byte address, byte value)
+void updateEEPROMByte(byte address, byte value)
 {
     if (EEPROM.read(address) != value)
         EEPROM.write(address, value);
 }
 
+//void updateEEPROMPhoneBook(byte address, String host, int port)
+void updateEEPROMPhoneBook(byte address, String host)
+{
+    int i=0;
+    for (; i < 38; i++)
+    {
+        EEPROM.write(address + i, host.c_str()[i]);
+    }
+    
+    /*byte a = BAUD_RATE / 256;
+    byte b = BAUD_RATE % 256;
+
+    updateEEPROMByte(address+i++,a);
+    updateEEPROMByte(address+i,b);*/
+}
+
+String readEEPROMPhoneBook(byte address)
+{
+    char host[38];
+    int i=0;
+    for (; i < 38; i++)
+    {
+        host[i] = EEPROM.read(address + i);
+    }
+    return host;
+    
+    //lastHost = host;
+
+    //lastPort = (EEPROM.read(address+i++) * 256 + EEPROM.read(address+i));
+}
+
+
+void processC64Inbound()
+{
+    lastC64input = C64Serial.read();
+    if (lastC64input == '+')
+    {
+        if (!escapeTimer)      // First time
+        {
+            escapeCount++;
+            escapeTimer = millis();
+        }
+        else
+        {
+            if ((millis() - 200) > escapeTimer)
+            escapeCount++;
+            escapeTimer = millis();
+        }
+    }
+    else
+        escapeCount = 0;
+
+    if (escapeCount == 3) {
+        Display("Escape!");
+        escapeReceived = true;
+        escapeCount = 0;
+        escapeTimer = 0;
+    }
+      
+    wifly.write(lastC64input);
+    //wifly.write(C64Serial.read());
+}
 
