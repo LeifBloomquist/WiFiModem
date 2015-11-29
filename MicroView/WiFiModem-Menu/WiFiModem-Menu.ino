@@ -122,11 +122,8 @@ int main(void)
         byte a = BAUD_RATE / 256;
         byte b = BAUD_RATE % 256;
 
-        // Let's not waste writes..
-        if (EEPROM.read(ADDR_BAUD_LO) != a)
-            EEPROM.write(ADDR_BAUD_LO, a);
-        if (EEPROM.read(ADDR_BAUD_HI) != b)
-            EEPROM.write(ADDR_BAUD_HI, b);
+        updateEEPROM(ADDR_BAUD_LO,a);
+        updateEEPROM(ADDR_BAUD_HI,b);
     }
 
     //setBaud(BAUD_RATE, false, true);
@@ -164,6 +161,7 @@ int main(void)
         //C64Serial.begin(BAUD_RATE);
 
         //delay(1000);
+
         DisplayBoth(F("Wi-Fi Init..."));
 
         boolean ok = wifly.begin(&WifiSerial, &C64Serial);
@@ -177,7 +175,7 @@ int main(void)
             DisplayBoth(F("Wi-Fi Failed!"));
             RawTerminalMode();
         }
-    
+
         // Enable DNS caching, TCP retry, TCP_NODELAY, TCP connection status
             wifly.setIpFlags(16 && 4 && 2 && 1);
     
@@ -226,14 +224,6 @@ int main(void)
     
         switch (option)
         {
-        case '1':
-            HayesEmulationMode();
-            break;
-    
-        case '2':
-                Configuration();
-            break;
-
         case '1':
             DoTelnet();
             break;
@@ -534,8 +524,7 @@ void ShowPETSCIIMode()
 void SetPETSCIIMode(boolean mode)
 {
     petscii_mode = mode;
-    if (EEPROM.read(ADDR_PETSCII) != petscii_mode)
-        EEPROM.write(ADDR_PETSCII, petscii_mode);
+    updateEEPROM(ADDR_PETSCII,petscii_mode);
 }
 
 
@@ -1128,8 +1117,7 @@ void ConfigureAutoStart()
             continue;
         }
 
-        if (EEPROM.read(ADDR_AUTOSTART) != autostart_mode)
-            EEPROM.write(ADDR_AUTOSTART, autostart_mode);  // Save
+        updateEEPROM(ADDR_AUTOSTART,autostart_mode);
         C64Println(F("Saved"));
     }
 }
@@ -1160,8 +1148,7 @@ void HandleAutoStart()
 //            break;
 
         default: // Invalid - on first startup or if corrupted.  Clear silently and continue to menu.
-        if (EEPROM.read(ADDR_AUTOSTART) != AUTO_NONE)
-            EEPROM.write(ADDR_AUTOSTART, AUTO_NONE);  // Save
+            updateEEPROM(ADDR_AUTOSTART,AUTO_NONE);
             autostart_mode = AUTO_NONE;
             return;
     }
@@ -1339,13 +1326,6 @@ void Modem_Disconnect()
     digitalWriteFast(C64_DTR, Modem_ToggleCarrier(false));
 }
 
-/*void Modem_SetEcho(boolean on)
-{
-    Modem_EchoOn = on;
-//    EEPROM.write(ADDR_MODEM_ECHO, Modem_EchoOn);  // Save
-}*/
-
-
 // Validate and handle AT sequence  (A/ was handled already)
 void Modem_ProcessCommandBuffer()
 {
@@ -1371,6 +1351,7 @@ void Modem_ProcessCommandBuffer()
         SetPETSCIIMode(petscii_mode_guess);
     }
 
+    // Used for a/ and also for setting SSID, PASS, KEY as they require upper/lower
     strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);
 
     // Force uppercase for consistency 
@@ -1381,7 +1362,7 @@ void Modem_ProcessCommandBuffer()
     }
 
     Display(Modem_CommandBuffer);
-
+    
     // TODO: Handle concatenated command strings.  For now, process a aingle command.
 
     if (strcmp(Modem_CommandBuffer, ("ATZ")) == 0)
@@ -1431,6 +1412,46 @@ void Modem_ProcessCommandBuffer()
     else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
     {
         Modem_Disconnect();
+    }
+    else if (strcmp(Modem_CommandBuffer, ("AT&RAW")) == 0)
+    {
+        RawTerminalMode();
+    }   
+    else if (strncmp(Modem_CommandBuffer, ("AT&SSID="), 8) == 0)
+    {
+        if (petscii_mode)
+            wifly.setSSID(petscii::ToASCII(Modem_LastCommandBuffer + 8).c_str());
+        else 
+            wifly.setSSID(Modem_LastCommandBuffer + 8);
+        
+        wifly.leave();
+        wifly.join(20000);    // 20 second timeout
+        Modem_PrintOK();
+    }
+    else if (strncmp(Modem_CommandBuffer, ("AT&PASS="), 8) == 0)
+    {
+        if (petscii_mode)
+            wifly.setPassphrase(petscii::ToASCII(Modem_LastCommandBuffer + 8).c_str());
+        else 
+            wifly.setPassphrase(Modem_LastCommandBuffer + 8);
+        
+        Modem_PrintOK();
+    }
+    else if (strncmp(Modem_CommandBuffer, ("AT&KEY="), 7) == 0)
+    {
+        if (petscii_mode)
+            wifly.setKey(petscii::ToASCII(Modem_LastCommandBuffer + 8).c_str());
+        else 
+            wifly.setKey(Modem_LastCommandBuffer + 8);
+        
+        Modem_PrintOK();
+    }
+    else if (strncmp(Modem_CommandBuffer, ("AT&SAVE"), 7) == 0)
+    {
+        if (wifly.save())
+            Modem_PrintOK();
+        else
+            Modem_PrintERROR();
     }
     else if (strncmp(Modem_CommandBuffer, ("AT"), 2) == 0)
     {
@@ -1965,6 +1986,12 @@ long detRate(int recpin)  // function to return valid received baud rate
     else
         baud = 0;
     return baud;
+}
+
+void updateEEPROM(byte address, byte value)
+{
+    if (EEPROM.read(address) != value)
+        EEPROM.write(address, value);
 }
 
 

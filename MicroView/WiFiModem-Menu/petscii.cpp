@@ -44,26 +44,29 @@ String petscii::ToASCII(const char *source)
 
 #define ASCII_UNMAPPED  '.'
 
+// char is -127 to +127 while PETSCII comes in from 0 to 255 so we use unsigned char.
 char charset_p_toascii(char c)
 {
-    c = petcii_fix_dupes(c);
+    unsigned char c2 = (unsigned char)c;
+    
+    c2 = petcii_fix_dupes2(c);
 
     /* map petscii to ascii */
-    if (c == 0x0d) {  /* petscii "return" */
+    if (c2 == 0x0d) {  /* petscii "return" */
         return '\n';
-    } else if (c == 0x0a) {
+    } else if (c2 == 0x0a) {
         return '\r';
-    } else if (c <= 0x1f) {
+    } else if (c2 <= 0x1f) {
         /* unhandled ctrl codes */
         return ASCII_UNMAPPED;
-    } else if (c == 0xa0) { /* petscii Shifted Space */
+    } else if (c2 == 0xa0) { /* petscii Shifted Space */
         return ' ';
-    } else if ((c >= 0xc1) && (c <= 0xda)) {
+    } else if ((c2 >= 0xc1) && (c2 <= 0xda)) {
         /* uppercase (petscii 0xc1 -) */
-        return (char)((c - 0xc1) + 'A');
-    } else if ((c >= 0x41) && (c <= 0x5a)) {
+        return (char)((c2 - 0xc1) + 'A');
+    } else if ((c2 >= 0x41) && (c2 <= 0x5a)) {        //1st
         /* lowercase (petscii 0x41 -) */
-        return (char)((c - 0x41) + 'a');
+        return (char)((c2 - 0x41) + 'a');
     }
 
     return ((isprint(c) ? c : ASCII_UNMAPPED));
@@ -99,6 +102,8 @@ char charset_p_topetcii(char c)
     return petcii_fix_dupes(c);
 }
 
+// Shifts 0x61 to 0xc1 (uppercase)
+// Shifts 0xe0 to 0xa0 (symbols)
 static char petcii_fix_dupes(char c)
 {
     if ((c >= 0x60) && (c <= 0x7f)) {
@@ -109,4 +114,16 @@ static char petcii_fix_dupes(char c)
     return c;
 }
 
+// Shifts 0x61 to 0xc1 (uppercase)
+// Shifts 0xe0 to 0xa0 (symbols)
+// char is -127 to +127 while PETSCII comes in from 0 to 255 so we use unsigned char.
+static unsigned char petcii_fix_dupes2(unsigned char c)
+{
+    if ((c >= 0x60) && (c <= 0x7f)) {
+        return ((c - 0x60) + 0xc0);
+    } else if (c >= 0xe0) {
+        return ((c - 0xe0) + 0xa0);
+    }
+    return c;
+}
 
