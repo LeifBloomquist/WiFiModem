@@ -4,9 +4,11 @@
     With assistance and code from Greg Alekel and Payton Byrd
 */
 
+//#define DEBUG
+
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-#define HAYES
+//#define HAYES
 //#define ENABLE_C64_DCD
 #include <MicroView.h>
 #include <elapsedMillis.h>
@@ -75,7 +77,6 @@ boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connec
 #define ADDR_AUTOSTART     1
 #define ADDR_BAUD_LO       2
 #define ADDR_BAUD_HI       3
-#define ADDR_DEBUG         4
 #define ADDR_HOST_AUTO    99     // Autostart host number
 #define ADDR_HOSTS         100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
 //#define ADDR_xxxxx         300
@@ -114,7 +115,7 @@ int main(void)
     pinMode (C64_RxD, INPUT);
     digitalWrite (C64_RxD, HIGH);
 
-    Display("Baud\ndetection");
+    Display(F("Baud\ndetection"));
 
     long detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
     // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
@@ -124,13 +125,13 @@ int main(void)
     //char temp[20];
     //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
     //Display(temp);
-    char temp[6];
-    sprintf(temp, "%ld", detectedBaudRate);
-    Display(temp);
-
-    delay(3000);
 
     if (detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 || detectedBaudRate == 9600 || detectedBaudRate == 19200) {
+        char temp[6];
+        sprintf_P(temp, PSTR("%ld"), detectedBaudRate);
+        Display(temp);
+        delay(3000);
+
         BAUD_RATE = detectedBaudRate;
 
         byte a = BAUD_RATE / 256;
@@ -178,11 +179,11 @@ int main(void)
 
         DisplayBoth(F("Wi-Fi Init..."));
 
-        boolean ok;
-        if(EEPROM.read(ADDR_DEBUG) == 1)
-           ok = wifly.begin(&WifiSerial, &C64Serial);
-        else
-           ok = wifly.begin(&WifiSerial);      
+#ifdef DEBUG
+        boolean ok = wifly.begin(&WifiSerial, &C64Serial);
+#else
+        boolean ok = wifly.begin(&WifiSerial);
+#endif
     
         if (ok)
         {
@@ -1400,7 +1401,6 @@ void Modem_ProcessCommandBuffer()
     else if (strcmp(Modem_CommandBuffer, ("AT&F")) == 0)
     {
         Modem_LoadDefaults();
-        updateEEPROMByte(ADDR_DEBUG,0);
         Modem_PrintOK();
     }
     else if (strcmp(Modem_CommandBuffer, ("ATA")) == 0)
@@ -1599,14 +1599,6 @@ void Modem_ProcessCommandBuffer()
                 Modem_PrintOK();
             else
                 Modem_PrintERROR();
-        }
-        if (strstr(Modem_CommandBuffer, ("&DEBUG=1")) != NULL)
-        {
-            updateEEPROMByte(ADDR_DEBUG,1);
-        }
-        if (strstr(Modem_CommandBuffer, ("&DEBUG=0")) != NULL)
-        {
-            updateEEPROMByte(ADDR_DEBUG,0);
         }
 
         char *currentS;
@@ -2075,7 +2067,6 @@ long detRate(int recpin)  // function to return valid received baud rate
       if (digitalRead(recpin) == 0)
           break;
     }
-    //while(digitalRead(recpin) == 1 && millis()-3000 < timer){} // wait for low bit to start
     long baud;
     long rate = pulseIn(recpin, LOW); // measure zero bit width from character 'U'
 
