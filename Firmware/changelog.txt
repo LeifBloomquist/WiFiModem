@@ -1,7 +1,26 @@
-Version 0.05b1 - WiFiModem-Menu-005b1.hex / WiFiModem-Menu-005b1-hayes.hex
---------------------------------------------------------------------------
+Version 0.05 - WiFiModem-Menu-005.hex / WiFiModem-Hayes-005.hex
+---------------------------------------------------------------
 
-Fix bug with buffer overflow for AT commands
+-Automatic baud rate detection at boot.  When 'Baud Detection' appears on the display, you have three seconds to press a character on the keyboard to detect the speed.  It's recommended to press the letter 'u' as this should always detect the correct speed.  If you do not press a key it will use the previously detected baud rate.  Supports 1200, 2400, 9600, 19200.  Note:  There are known issues with 1200 baud support which are being investigated.  1200 baud support may be removed from future versions.
+
+Menu only:
+-Added +++ support to hang up the call.
+-Changing the SSID / passphrase / key will now take effect immediately and a reboot is not required.
+
+Hayes only:
+-Removed menu system.  Device now boots directly to AT command mode.
+-Fix for random crash/reboot
+-at&k1 / at&k0 to enable / disable flow control
+-Fix for dialing from terminal program.  If there are still issues, enable flow control (at&k1) or disable echo (ate0) and report it as a bug.
+-Added at&raw to enter raw terminal mode
+-Added at&ssid= at&pass= and at&key= to set WiFi
+-Added at&w to save settings.  This is needed to save the WiFi settings.
+-Added preliminary +++ support.  Currently hangs up but will be changed to drop to AT command mode in the future.
+-Added phone book with auto-start.  Examples:
+ -at&pb1=bbs.jammingsignal.com:23	Phone booke entry #1
+ -at&pb?				List entries
+ -at&clear				Clear all entries
+ -atd#1					Dial phone book entry #1
 
 
 Version 0.04 - WiFiModem-Menu-004.hex / WiFiModem-Menu-004-hayes.hex
