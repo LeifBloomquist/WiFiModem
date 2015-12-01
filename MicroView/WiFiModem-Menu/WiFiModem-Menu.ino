@@ -68,14 +68,16 @@ boolean escapeReceived = false;
 char autoConnectHost = 0;
 boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connect once..
 #define ADDR_HOST_SIZE     40
+#define ADDR_HOST_ENTRIES  9
     
 // EEPROM Addresses
 #define ADDR_PETSCII       0
 #define ADDR_AUTOSTART     1
 #define ADDR_BAUD_LO       2
 #define ADDR_BAUD_HI       3
+#define ADDR_DEBUG         4
 #define ADDR_HOST_AUTO    99     // Autostart host number
-#define ADDR_HOSTS         100    // to 299 with ADDR_HOST_SIZE = 40
+#define ADDR_HOSTS         100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
 //#define ADDR_xxxxx         300
 
 // PETSCII state
@@ -176,7 +178,11 @@ int main(void)
 
         DisplayBoth(F("Wi-Fi Init..."));
 
-        boolean ok = wifly.begin(&WifiSerial, &C64Serial);
+        boolean ok;
+        if(EEPROM.read(ADDR_DEBUG) == 1)
+           ok = wifly.begin(&WifiSerial, &C64Serial);
+        else
+           ok = wifly.begin(&WifiSerial);      
     
         if (ok)
         {
@@ -1393,9 +1399,10 @@ void Modem_ProcessCommandBuffer()
     }
     else if (strcmp(Modem_CommandBuffer, ("AT&F")) == 0)
     {
-            Modem_LoadDefaults();
-            Modem_PrintOK();
-        }
+        Modem_LoadDefaults();
+        updateEEPROMByte(ADDR_DEBUG,0);
+        Modem_PrintOK();
+    }
     else if (strcmp(Modem_CommandBuffer, ("ATA")) == 0)
     {
         Modem_Answer();    
@@ -1420,7 +1427,7 @@ void Modem_ProcessCommandBuffer()
         char address[ADDR_HOST_SIZE];
         
         int phoneBookNumber = atoi(numString);
-        if (phoneBookNumber >= 1 && phoneBookNumber <= 5)
+        if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES)
         {
             strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
             Modem_Dialout(address);
@@ -1479,13 +1486,6 @@ void Modem_ProcessCommandBuffer()
         
         Modem_PrintOK();
     }
-    else if (strncmp(Modem_CommandBuffer, ("AT&SAVE"), 7) == 0)
-    {
-        if (wifly.save())
-            Modem_PrintOK();
-        else
-            Modem_PrintERROR();
-    }
     // AT&PB1=bbs.jammingsignal.com:23
     else if (strncmp(Modem_CommandBuffer, ("AT&PBAUTO="), 10) == 0)
     {
@@ -1494,7 +1494,7 @@ void Modem_ProcessCommandBuffer()
         numString[1] = '\0';
         
         int phoneBookNumber = atoi(numString);
-        if (phoneBookNumber >= 0 && phoneBookNumber <= 5)
+        if (phoneBookNumber >= 0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
         {
             updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);
                         
@@ -1502,9 +1502,10 @@ void Modem_ProcessCommandBuffer()
         }
         else
             Modem_PrintERROR();
-    }    else if (strncmp(Modem_CommandBuffer, ("AT&PB?"), 6) == 0)
+    }    
+    else if (strstr(Modem_CommandBuffer, ("AT&PB?")) != NULL)
     {
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
         {
             C64Serial.print(i+1);
             C64Print(F(":"));
@@ -1516,9 +1517,9 @@ void Modem_ProcessCommandBuffer()
         C64Println();
         Modem_PrintOK();
     }
-    else if (strncmp(Modem_CommandBuffer, ("AT&PBCLEAR"), 6) == 0)
+    else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR")) != NULL)
     {
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
         {
             updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
         }
@@ -1532,7 +1533,7 @@ void Modem_ProcessCommandBuffer()
         numString[1] = '\0';
         
         int phoneBookNumber = atoi(numString);
-        if (phoneBookNumber >= 1 && phoneBookNumber <= 5)
+        if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES)
         {
             updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), Modem_CommandBuffer + 7);
             Modem_PrintOK();
@@ -1592,7 +1593,22 @@ void Modem_ProcessCommandBuffer()
         {
             Modem_flowControl = true;
         }
-        
+        if (strstr(Modem_CommandBuffer, ("&W")) != NULL)
+        {
+            if (wifly.save())
+                Modem_PrintOK();
+            else
+                Modem_PrintERROR();
+        }
+        if (strstr(Modem_CommandBuffer, ("&DEBUG=1")) != NULL)
+        {
+            updateEEPROMByte(ADDR_DEBUG,1);
+        }
+        if (strstr(Modem_CommandBuffer, ("&DEBUG=0")) != NULL)
+        {
+            updateEEPROMByte(ADDR_DEBUG,0);
+        }
+
         char *currentS;
         char temp[100];
 
@@ -1897,7 +1913,7 @@ void Modem_Loop()
     //	digitalWrite(DTE_RTS, LOW);
     //}
 
-    if (autoConnectHost >=1 && autoConnectHost <= 5 && !autoConnectedAtBootAlready)
+    if (autoConnectHost >=1 && autoConnectHost <= ADDR_HOST_ENTRIES && !autoConnectedAtBootAlready)
     {
         // Phonebook dial
         autoConnectedAtBootAlready = 1;
@@ -2088,14 +2104,14 @@ long detRate(int recpin)  // function to return valid received baud rate
     return baud;
 }
 
-void updateEEPROMByte(byte address, byte value)
+void updateEEPROMByte(int address, byte value)
 {
     if (EEPROM.read(address) != value)
         EEPROM.write(address, value);
 }
 
 //void updateEEPROMPhoneBook(byte address, String host, int port)
-void updateEEPROMPhoneBook(byte address, String host)
+void updateEEPROMPhoneBook(int address, String host)
 {
     int i=0;
     for (; i < 38; i++)
@@ -2110,7 +2126,7 @@ void updateEEPROMPhoneBook(byte address, String host)
     updateEEPROMByte(address+i,b);*/
 }
 
-String readEEPROMPhoneBook(byte address)
+String readEEPROMPhoneBook(int address)
 {
     char host[38];
     int i=0;
