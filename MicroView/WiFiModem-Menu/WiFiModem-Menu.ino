@@ -8,7 +8,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-//#define HAYES
+#define HAYES
 //#define ENABLE_C64_DCD
 #include <MicroView.h>
 #include <elapsedMillis.h>
@@ -20,7 +20,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.05b2"
+#define VERSION "0.06b1"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -1388,7 +1388,7 @@ void Modem_ProcessCommandBuffer()
     
     // TODO: Handle concatenated command strings.  For now, process a aingle command.
 
-    if (strcmp(Modem_CommandBuffer, ("ATZ")) == 0)
+    /*if (strcmp(Modem_CommandBuffer, ("ATZ")) == 0)
     {
         Modem_LoadDefaults();
         Modem_PrintOK();
@@ -1407,7 +1407,7 @@ void Modem_ProcessCommandBuffer()
     {
         Modem_Answer();    
     }
-    else if (strcmp(Modem_CommandBuffer, ("ATD")) == 0 || strcmp(Modem_CommandBuffer, ("ATO")) == 0)
+    else*/ if (strcmp(Modem_CommandBuffer, ("ATD")) == 0 || strcmp(Modem_CommandBuffer, ("ATO")) == 0)
     {
         if (Modem_isConnected)
         {
@@ -1544,6 +1544,130 @@ void Modem_ProcessCommandBuffer()
         //Display(readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)));
         //delay(2000);
     }
+
+    else if (strncmp(Modem_CommandBuffer, ("AT"), 2) == 0)
+    {
+        for(int i=2; i < strlen(Modem_CommandBuffer) && i < COMMAND_BUFFER_SIZE-3;)
+        {
+            switch(Modem_CommandBuffer[i++]) 
+            {
+                case 'Z':
+                Modem_LoadDefaults();
+                Modem_PrintOK();                
+                break;
+                
+                case 'I':
+                ShowInfo(false);
+                Modem_PrintOK();               
+                break;
+
+                case 'A':
+                Modem_Answer();               
+                break;
+
+                case 'E':
+                switch(Modem_CommandBuffer[i++])
+                {
+                    case '0':
+                    Modem_EchoOn = false;
+                    break;
+
+                    case '1':
+                    Modem_EchoOn = true;
+                    break;
+
+                    case '?':
+                    //C64PrintIntln(EEPROM.read(ADDR_MODEM_ECHO));
+                    break;
+                }
+                break;
+                
+                case 'H':
+                if (Modem_CommandBuffer[i+1] == '0')
+                  Modem_CommandBuffer[i++]; 
+                Modem_Disconnect();
+                break;                
+                case 'Q':
+
+                switch(Modem_CommandBuffer[i++])
+                {
+                    case '0':
+                    Modem_VerboseResponses = false;
+                    Modem_QuietMode = false;
+                    break;
+
+                    case '1':
+                    Modem_QuietMode = true;
+                    break;
+                }
+                break;
+                
+                case 'V':
+                switch(Modem_CommandBuffer[i++])
+                {
+                    case '0':
+                    Modem_VerboseResponses = false;
+                    break;
+
+                    case '1':
+                    Modem_VerboseResponses = true;
+                    break;
+                }
+                break;
+                
+                case 'X':
+                switch(Modem_CommandBuffer[i++])
+                {
+                    case '0':
+                    // TODO
+                    break;
+
+                    case '1':
+                    // TODO
+                    break;
+                }
+                break;
+                
+                case '&':
+                switch(Modem_CommandBuffer[i++])
+                {
+                    case 'F':
+                    if (strstr(Modem_LastCommandBuffer, ("&F")) != NULL)      // not working...
+                    {
+                        Modem_LoadDefaults();
+                        Modem_PrintOK();
+                    }
+                    else
+                    {
+                        C64Println(F("Send command again to verify")); 
+                    }
+                    break;
+                    
+                    case 'K':
+                    switch(Modem_CommandBuffer[i++])
+                    {
+                        case '0':
+                        Modem_flowControl = false;
+                        break;
+    
+                        case '1':
+                        Modem_flowControl = true;
+                        break;
+                    }
+                    break;
+                    
+                    case 'W':
+                    if (wifly.save())
+                        Modem_PrintOK();
+                    else
+                        Modem_PrintERROR();
+                    break;
+                }
+                break;
+            }
+        }
+    
+    /*
     else if (strncmp(Modem_CommandBuffer, ("AT"), 2) == 0)
     {
         if (strstr(Modem_CommandBuffer, ("E0")) != NULL)
@@ -1600,7 +1724,7 @@ void Modem_ProcessCommandBuffer()
             else
                 Modem_PrintERROR();
         }
-
+*/
         char *currentS;
         char temp[100];
 
