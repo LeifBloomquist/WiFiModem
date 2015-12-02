@@ -56,11 +56,6 @@ WiFly wifly;
 String lastHost = "";
 int lastPort = 23;
 
-// Misc Values
-#define TIMEDOUT  -1
-boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
-boolean Modem_flowControl = false;   // for &K setting.  Not currently stored in EEPROM
-
 char escapeCount = 0;
 int lastC64input = 0;
 unsigned long escapeTimer = 0;
@@ -77,9 +72,23 @@ boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connec
 #define ADDR_AUTOSTART     1
 #define ADDR_BAUD_LO       2
 #define ADDR_BAUD_HI       3
+#define ADDR_MODEM_ECHO         10
+#define ADDR_MODEM_FLOW         11
+//#define ADDR_MODEM_VERBOSE      12
+//#define ADDR_MODEM_QUIET        13
+//#define ADDR_MODEM_S0_AUTOANS   14
+//#define ADDR_MODEM_S2_ESCAPE    15
+//#define ADDR_MODEM_DCD_INVERTED 16
+
 #define ADDR_HOST_AUTO    99     // Autostart host number
 #define ADDR_HOSTS         100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
 //#define ADDR_xxxxx         300
+
+// Misc Values
+#define TIMEDOUT  -1
+boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
+//boolean Modem_flowControl = false;   // for &K setting.  Not currently stored in EEPROM
+boolean Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
 
 // PETSCII state
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
@@ -1224,8 +1233,8 @@ void HandleAutoStart()
 boolean Modem_isCommandMode = true;
 boolean Modem_isConnected = false;
 boolean Modem_isRinging = false;
-//boolean Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
-boolean Modem_EchoOn = true;
+boolean Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
+//boolean Modem_EchoOn = true;
 boolean Modem_VerboseResponses = true;
 boolean Modem_QuietMode = false;
 boolean Modem_isDcdInverted = false;
@@ -1449,14 +1458,14 @@ void Modem_ProcessCommandBuffer()
         Modem_Dialout(strstr(Modem_CommandBuffer, "ATDT") + 4);
         Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
     }
-    else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
+    /*else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
     {
         Modem_Disconnect();
-    }
-    else if (strcmp(Modem_CommandBuffer, ("AT&RAW")) == 0)
+    }*/
+    /*else if (strcmp(Modem_CommandBuffer, ("AT&RAW")) == 0)
     {
         RawTerminalMode();
-    }   
+    }  */ 
     else if (strncmp(Modem_CommandBuffer, ("AT&SSID="), 8) == 0)
     {
         if (petscii_mode)
@@ -1586,9 +1595,9 @@ void Modem_ProcessCommandBuffer()
                 if (Modem_CommandBuffer[i+1] == '0')
                   Modem_CommandBuffer[i++]; 
                 Modem_Disconnect();
-                break;                
-                case 'Q':
+                break;
 
+                case 'Q':
                 switch(Modem_CommandBuffer[i++])
                 {
                     case '0':
@@ -1601,6 +1610,31 @@ void Modem_ProcessCommandBuffer()
                     break;
                 }
                 break;
+
+                case 'S':
+                switch(Modem_CommandBuffer[i++])
+                {
+                    case '0':
+                    switch(Modem_CommandBuffer[i++])
+                    {
+                        case '=':
+                        switch(Modem_CommandBuffer[i++])
+                        {
+                            case '0':
+                            Modem_S0_AutoAnswer = 0;
+                            break;
+        
+                            case '1':
+                            Modem_S0_AutoAnswer = 1;
+                            break;
+                        }
+                        break;    
+                    }
+                    break;
+
+                }
+                break;
+
                 
                 case 'V':
                 switch(Modem_CommandBuffer[i++])
@@ -1655,8 +1689,14 @@ void Modem_ProcessCommandBuffer()
                         break;
                     }
                     break;
+
+                    case 'R':
+                    RawTerminalMode();
+                    break;
                     
                     case 'W':
+                    updateEEPROMByte(ADDR_MODEM_ECHO,Modem_EchoOn);
+                    updateEEPROMByte(ADDR_MODEM_FLOW,Modem_flowControl);
                     if (wifly.save())
                         Modem_PrintOK();
                     else
@@ -1725,7 +1765,7 @@ void Modem_ProcessCommandBuffer()
                 Modem_PrintERROR();
         }
 */
-        char *currentS;
+        /*char *currentS;
         char temp[100];
 
         int offset = 0;
@@ -1740,7 +1780,7 @@ void Modem_ProcessCommandBuffer()
             memset(temp, 0, 100);
             strncpy(temp, currentS + 3, offset - 3);
             Modem_S0_AutoAnswer = atoi(temp);
-        }
+        }*/
 
         Modem_PrintOK();
     }
