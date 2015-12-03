@@ -87,8 +87,7 @@ boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connec
 // Misc Values
 #define TIMEDOUT  -1
 boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
-//boolean Modem_flowControl = false;   // for &K setting.  Not currently stored in EEPROM
-boolean Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
+boolean Modem_flowControl = false;   // for &K setting.
 
 // PETSCII state
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
@@ -1233,7 +1232,7 @@ void HandleAutoStart()
 boolean Modem_isCommandMode = true;
 boolean Modem_isConnected = false;
 boolean Modem_isRinging = false;
-boolean Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
+boolean Modem_EchoOn = true;
 //boolean Modem_EchoOn = true;
 boolean Modem_VerboseResponses = true;
 boolean Modem_QuietMode = false;
@@ -1262,6 +1261,11 @@ void HayesEmulationMode()
     Modem_EscapeCount = 0;
 
     Modem_LoadDefaults();
+
+    // Load saved settings
+    Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
+    Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
+    
     Modem_ResetCommandBuffer();
 
     C64Println();
@@ -1317,6 +1321,7 @@ void Modem_LoadDefaults(void)
     Modem_S0_AutoAnswer = false;
     Modem_S2_EscapeCharacter = '+';
     Modem_isDcdInverted = false;
+    Modem_flowControl = false;
 }
 
 
@@ -1362,6 +1367,7 @@ void Modem_Disconnect()
 void Modem_ProcessCommandBuffer()
 {
     boolean petscii_mode_guess = false;
+    byte errors = 0;
     // Simple PETSCII/ASCII detection
    
     if (((Modem_CommandBuffer[0] == 'A') && (Modem_CommandBuffer[1] == 'T')))
@@ -1562,12 +1568,10 @@ void Modem_ProcessCommandBuffer()
             {
                 case 'Z':
                 Modem_LoadDefaults();
-                Modem_PrintOK();                
                 break;
                 
                 case 'I':
                 ShowInfo(false);
-                Modem_PrintOK();               
                 break;
 
                 case 'A':
@@ -1586,8 +1590,12 @@ void Modem_ProcessCommandBuffer()
                     break;
 
                     case '?':
+                    C64Serial.print(Modem_EchoOn);
                     //C64PrintIntln(EEPROM.read(ADDR_MODEM_ECHO));
                     break;
+
+                    default:
+                    errors++;
                 }
                 break;
                 
@@ -1608,6 +1616,13 @@ void Modem_ProcessCommandBuffer()
                     case '1':
                     Modem_QuietMode = true;
                     break;
+
+                    case '?':
+                    C64Serial.print(Modem_QuietMode);
+                    break;
+
+                    default:
+                    errors++;
                 }
                 break;
 
@@ -1627,7 +1642,14 @@ void Modem_ProcessCommandBuffer()
                             case '1':
                             Modem_S0_AutoAnswer = 1;
                             break;
-                        }
+
+                            case '?':
+                            C64Serial.print(Modem_S0_AutoAnswer);
+                            break;
+
+                            default:
+                            errors++;
+                            }
                         break;    
                     }
                     break;
@@ -1646,6 +1668,13 @@ void Modem_ProcessCommandBuffer()
                     case '1':
                     Modem_VerboseResponses = true;
                     break;
+
+                    case '?':
+                    C64Serial.print(Modem_VerboseResponses);
+                    break;
+
+                    default:
+                    errors++;
                 }
                 break;
                 
@@ -1659,6 +1688,7 @@ void Modem_ProcessCommandBuffer()
                     case '1':
                     // TODO
                     break;
+
                 }
                 break;
                 
@@ -1666,15 +1696,7 @@ void Modem_ProcessCommandBuffer()
                 switch(Modem_CommandBuffer[i++])
                 {
                     case 'F':
-                    if (strstr(Modem_LastCommandBuffer, ("&F")) != NULL)      // not working...
-                    {
-                        Modem_LoadDefaults();
-                        Modem_PrintOK();
-                    }
-                    else
-                    {
-                        C64Println(F("Send command again to verify")); 
-                    }
+                    Modem_LoadDefaults();
                     break;
                     
                     case 'K':
@@ -1687,6 +1709,13 @@ void Modem_ProcessCommandBuffer()
                         case '1':
                         Modem_flowControl = true;
                         break;
+                        
+                        case '?':
+                        C64Serial.print(Modem_flowControl);
+                        break;
+
+                        default:
+                        errors++;
                     }
                     break;
 
@@ -1697,13 +1726,22 @@ void Modem_ProcessCommandBuffer()
                     case 'W':
                     updateEEPROMByte(ADDR_MODEM_ECHO,Modem_EchoOn);
                     updateEEPROMByte(ADDR_MODEM_FLOW,Modem_flowControl);
-                    if (wifly.save())
+                    /*if (wifly.save())
                         Modem_PrintOK();
                     else
-                        Modem_PrintERROR();
+                        Modem_PrintERROR();*/
+                    if (!(wifly.save()))
+                        errors++;                        
                     break;
                 }
                 break;
+
+                case '\n':
+                case '\r':
+                break;
+
+                default:
+                errors++;
             }
         }
     
@@ -1782,7 +1820,10 @@ void Modem_ProcessCommandBuffer()
             Modem_S0_AutoAnswer = atoi(temp);
         }*/
 
-        Modem_PrintOK();
+        if (errors)
+            Modem_PrintERROR();
+        else
+            Modem_PrintOK();
     }
     else
     {
