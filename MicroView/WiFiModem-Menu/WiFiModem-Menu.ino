@@ -1368,6 +1368,12 @@ void Modem_ProcessCommandBuffer()
 {
     boolean petscii_mode_guess = false;
     byte errors = 0;
+    boolean dialed_out = 0;
+    // Phonebook dial
+    char numString[2];
+    char address[ADDR_HOST_SIZE];
+    int phoneBookNumber;
+    
     // Simple PETSCII/ASCII detection
    
     if (((Modem_CommandBuffer[0] == 'A') && (Modem_CommandBuffer[1] == 'T')))
@@ -1432,7 +1438,7 @@ void Modem_ProcessCommandBuffer()
         {
             Modem_PrintERROR();
         }
-    }
+    }/*
     else if (strncmp(Modem_CommandBuffer, ("ATD#"), 4) == 0)
     {
         // Phonebook dial
@@ -1449,8 +1455,8 @@ void Modem_ProcessCommandBuffer()
         }
         else
             Modem_PrintERROR();
-    }
-    else if (   // This needs to be revisited
+    }*/
+    /*else if (   // This needs to be revisited
         strncmp(Modem_CommandBuffer, ("ATDT "), 5) == 0 ||
         strncmp(Modem_CommandBuffer, ("ATDP "), 5) == 0 ||
         strncmp(Modem_CommandBuffer, ("ATD "), 4) == 0
@@ -1463,7 +1469,7 @@ void Modem_ProcessCommandBuffer()
     {
         Modem_Dialout(strstr(Modem_CommandBuffer, "ATDT") + 4);
         Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
-    }
+    }*/
     /*else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
     {
         Modem_Disconnect();
@@ -1736,6 +1742,46 @@ void Modem_ProcessCommandBuffer()
                 }
                 break;
 
+
+                // Dialing should come last..
+                // TODO:  Need to allow for spaces after D, DT, DP.  Currently fails.
+                case 'D':
+                switch(Modem_CommandBuffer[i])
+                {
+                    case 'T':
+                    case 'P':                    
+                    Modem_Dialout(&Modem_CommandBuffer[i+1]);
+                    dialed_out = 1;
+                    i = COMMAND_BUFFER_SIZE-3;    // Make sure we don't try to process any more...
+                    break;
+
+                    case '#':
+                    // Phonebook dial
+                    //char numString[2];
+                    numString[0] = Modem_CommandBuffer[i+1];
+                    numString[1] = '\0';
+                    //char address[ADDR_HOST_SIZE];
+        
+                    //int phoneBookNumber = atoi(numString);
+                    phoneBookNumber = atoi(numString);
+                    if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+                    {
+                        strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+                        Modem_Dialout(address);
+                        dialed_out = 1;                        
+                    }
+                    else
+                        errors++;
+                    break;
+
+                    default:
+                    Modem_Dialout(&Modem_CommandBuffer[i]);
+                    dialed_out = 1;
+                    i = COMMAND_BUFFER_SIZE-3;    // Make sure we don't try to process any more...
+                    break;
+                }
+                break;
+
                 case '\n':
                 case '\r':
                 break;
@@ -1820,10 +1866,12 @@ void Modem_ProcessCommandBuffer()
             Modem_S0_AutoAnswer = atoi(temp);
         }*/
 
-        if (errors)
-            Modem_PrintERROR();
-        else
-            Modem_PrintOK();
+        if (!dialed_out) {    // Should add error checking to calls to Modem_Dialout(), Connect() etc.
+            if (errors)   
+                Modem_PrintERROR();
+            else
+                Modem_PrintOK();
+        }
     }
     else
     {
