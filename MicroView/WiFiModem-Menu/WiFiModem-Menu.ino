@@ -4,11 +4,21 @@
     With assistance and code from Greg Alekel and Payton Byrd
 */
 
+/* TODO
+ *  set ip tcp-mode 0x10 to disable remote configuration
+ *  wifly.setBroadcastInterval(0);
+ *  wifly.setDeviceID("Wifi-Modem");
+ *  
+ *  
+ *  
+ */
+
+
 //#define DEBUG
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-#define HAYES
+//#define HAYES
 //#define ENABLE_C64_DCD
 #include <MicroView.h>
 #include <elapsedMillis.h>
@@ -74,11 +84,11 @@ boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connec
 #define ADDR_BAUD_HI       3
 #define ADDR_MODEM_ECHO         10
 #define ADDR_MODEM_FLOW         11
-//#define ADDR_MODEM_VERBOSE      12
-//#define ADDR_MODEM_QUIET        13
-//#define ADDR_MODEM_S0_AUTOANS   14
-//#define ADDR_MODEM_S2_ESCAPE    15
-//#define ADDR_MODEM_DCD_INVERTED 16
+#define ADDR_MODEM_VERBOSE      12
+#define ADDR_MODEM_QUIET        13
+#define ADDR_MODEM_S0_AUTOANS   14
+#define ADDR_MODEM_S2_ESCAPE    15
+#define ADDR_MODEM_DCD_INVERTED 16
 
 #define ADDR_HOST_AUTO    99     // Autostart host number
 #define ADDR_HOSTS         100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
@@ -673,9 +683,13 @@ void Incoming()
     if (strport.length() > 0)
     {
         localport = strport.toInt();
-        wifly.setPort(localport);
-        wifly.save();
-        wifly.reboot();
+        if(wifly.getPort() != localport) {
+            C64Println("Rebooting WiFly...");
+            wifly.setPort(localport);
+            wifly.save();
+            wifly.reboot();
+            delay(3000);
+        }
     }
 
     localport = wifly.getPort();
@@ -765,7 +779,10 @@ void Connect(String host, int port, boolean raw)
     /* Do a DNS lookup to get the IP address.  Lookup has a 5 second timeout. */
     char ip[16];
     if (!wifly.getHostByName(host.c_str(), ip, sizeof(ip))) {
-       DisplayBoth(F("Could not resolve DNS.  Connect Failed!")); 
+       DisplayBoth(F("Could not resolve DNS.  Connect Failed!"));
+#ifdef HAYES
+       Modem_Disconnect();
+#endif
        return;
     }
 
@@ -787,6 +804,7 @@ void Connect(String host, int port, boolean raw)
     {
 #ifdef HAYES
         Display(F("Connect Failed!"));
+        Modem_Disconnect();
 #else
         DisplayBoth(F("Connect Failed!"));
 #endif
@@ -964,8 +982,8 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
 {
     int inpint, verbint, optint;        //    telnet parameters as integers
 
-    // Wait for first character for 5 seconds
-    inpint = PeekByte(wifly, 5000);
+    // Wait for first character for 10 seconds
+    inpint = PeekByte(wifly, 10000);
 
     if (inpint != IAC)
     {
@@ -977,7 +995,7 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
 
     while (true)
     {
-        inpint = PeekByte(wifly, 1000);       // peek at next character, timeout after 1 second
+        inpint = PeekByte(wifly, 5000);       // peek at next character, timeout after 5 second
 
             if (inpint != IAC)
             {
@@ -1265,7 +1283,11 @@ void HayesEmulationMode()
     // Load saved settings
     Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
     Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
-    
+    Modem_VerboseResponses = EEPROM.read(ADDR_MODEM_VERBOSE);
+    Modem_QuietMode = EEPROM.read(ADDR_MODEM_QUIET);
+    Modem_S0_AutoAnswer = EEPROM.read(ADDR_MODEM_S0_AUTOANS);
+    Modem_S2_EscapeCharacter = EEPROM.read(ADDR_MODEM_S2_ESCAPE);
+    Modem_isDcdInverted = EEPROM.read(ADDR_MODEM_DCD_INVERTED);
     Modem_ResetCommandBuffer();
 
     C64Println();
@@ -1292,10 +1314,13 @@ void Modem_PrintResponse(const char* code, const __FlashStringHelper * msg)
 {
     C64Println();
 
-    if (Modem_VerboseResponses)
-        C64Println(msg);
-    else
-        C64Println(code);
+    if (!Modem_QuietMode)
+    {
+        if (Modem_VerboseResponses)
+            C64Println(msg);
+        else
+            C64Println(code);
+    }
 
     // Always show verbose version on OLED, underneath command
     uView.println();
@@ -1615,7 +1640,6 @@ void Modem_ProcessCommandBuffer()
                 switch(Modem_CommandBuffer[i++])
                 {
                     case '0':
-                    Modem_VerboseResponses = false;
                     Modem_QuietMode = false;
                     break;
 
@@ -1732,6 +1756,12 @@ void Modem_ProcessCommandBuffer()
                     case 'W':
                     updateEEPROMByte(ADDR_MODEM_ECHO,Modem_EchoOn);
                     updateEEPROMByte(ADDR_MODEM_FLOW,Modem_flowControl);
+                    updateEEPROMByte(ADDR_MODEM_VERBOSE, Modem_VerboseResponses);
+                    updateEEPROMByte(ADDR_MODEM_QUIET, Modem_QuietMode);
+                    updateEEPROMByte(ADDR_MODEM_S0_AUTOANS, Modem_S0_AutoAnswer);
+                    updateEEPROMByte(ADDR_MODEM_S2_ESCAPE, Modem_S2_EscapeCharacter);
+                    updateEEPROMByte(ADDR_MODEM_DCD_INVERTED, Modem_isDcdInverted);
+                    
                     /*if (wifly.save())
                         Modem_PrintOK();
                     else
@@ -1749,7 +1779,8 @@ void Modem_ProcessCommandBuffer()
                 switch(Modem_CommandBuffer[i])
                 {
                     case 'T':
-                    case 'P':                    
+                    case 'P':
+                    removeSpaces(&Modem_CommandBuffer[i+1]);
                     Modem_Dialout(&Modem_CommandBuffer[i+1]);
                     dialed_out = 1;
                     i = COMMAND_BUFFER_SIZE-3;    // Make sure we don't try to process any more...
@@ -1767,6 +1798,7 @@ void Modem_ProcessCommandBuffer()
                     if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES)
                     {
                         strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+                        removeSpaces(address);
                         Modem_Dialout(address);
                         dialed_out = 1;                        
                     }
@@ -1775,6 +1807,7 @@ void Modem_ProcessCommandBuffer()
                     break;
 
                     default:
+                    removeSpaces(&Modem_CommandBuffer[i]);
                     Modem_Dialout(&Modem_CommandBuffer[i]);
                     dialed_out = 1;
                     i = COMMAND_BUFFER_SIZE-3;    // Make sure we don't try to process any more...
@@ -2421,5 +2454,19 @@ void processC64Inbound()
       
     wifly.write(C64input);
     //wifly.write(C64Serial.read());
+}
+
+void removeSpaces(char *temp)
+{
+  char *p1 = temp;
+  char *p2 = temp;
+
+  while(*p2 != 0)
+  {
+    *p1 = *p2++;
+    if (*p1 != ' ')
+      p1++;
+  }
+  *p1 = 0;
 }
 
