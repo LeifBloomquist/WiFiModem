@@ -19,7 +19,6 @@
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
 //#define HAYES
-//#define ENABLE_C64_DCD
 #include <MicroView.h>
 #include <elapsedMillis.h>
 #include <SoftwareSerial.h>
@@ -30,7 +29,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.06"
+#define VERSION "0.07b1"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -89,6 +88,7 @@ boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connec
 #define ADDR_MODEM_S0_AUTOANS   14
 #define ADDR_MODEM_S2_ESCAPE    15
 #define ADDR_MODEM_DCD_INVERTED 16
+#define ADDR_MODEM_DCD          17
 
 #define ADDR_HOST_AUTO          99     // Autostart host number
 #define ADDR_HOSTS              100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
@@ -100,10 +100,8 @@ boolean Modem_isCommandMode = true;
 boolean Modem_isConnected = false;
 boolean Modem_isRinging = false;
 boolean Modem_EchoOn = true;
-//boolean Modem_EchoOn = true;
 boolean Modem_VerboseResponses = true;
 boolean Modem_QuietMode = false;
-boolean Modem_isDcdInverted = false;
 boolean Modem_S0_AutoAnswer = false;
 char    Modem_S2_EscapeCharacter = '+';
 #endif    // HAYES
@@ -118,6 +116,8 @@ int Modem_EscapeCount = 0;
 #define TIMEDOUT  -1
 boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 boolean Modem_flowControl = false;   // for &K setting.
+boolean Modem_isDcdInverted = false;
+boolean Modem_DCDFollowsRemoteCarrier = false;    // &C
 
 // PETSCII state
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
@@ -142,6 +142,16 @@ int main(void)
     uView.begin(); // begin of MicroView
     uView.setFontType(0);
     uView.clear(ALL); // erase hardware memory inside the OLED controller
+
+    pinModeFast(C64_DCD, OUTPUT);
+    Modem_DCDFollowsRemoteCarrier = EEPROM.read(ADDR_MODEM_DCD);
+
+    if (Modem_DCDFollowsRemoteCarrier) {
+      digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
+    }
+    else {
+      digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+    }
     
     BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
     if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200)
@@ -202,7 +212,7 @@ int main(void)
         // Force CTS to defaults on both sides to start, so data can get through
         digitalWriteFast(WIFI_CTS, LOW);
         digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
-       
+
         //WifiSerial.begin(WiFly_BAUD_RATE);
 
   /*
@@ -246,10 +256,6 @@ int main(void)
         baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
       
         wifly.close();
-
-#ifdef ENABLE_C64_DCD
-        digitalWriteFast(C64_DCD, true);    // true = no carrier
-#endif    
 
 #ifndef HAYES        
         Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
@@ -330,9 +336,11 @@ void Configuration()
         C64Println(F("2. Change SSID"));
         sprintf_P(temp,PSTR("3. %s flow control"),Modem_flowControl == true ? "Disable" : "Enable");        
         C64Println(temp);      
-        C64Println(F("4. Autostart Options"));      
-        C64Println(F("5. Direct Terminal Mode (Debug)"));
-        C64Println(F("6. Return to Main Menu"));
+        sprintf_P(temp,PSTR("4. %s DCD always on"),Modem_DCDFollowsRemoteCarrier == false ? "Disable" : "Enable");        
+        C64Println(temp);      
+        C64Println(F("5. Autostart Options"));      
+        C64Println(F("6. Direct Terminal Mode (Debug)"));
+        C64Println(F("7. Return to Main Menu"));
         C64Println();
         C64Print(F("Select: "));
 
@@ -347,23 +355,34 @@ void Configuration()
         case '2': ChangeSSID();
             break;
 
-#ifndef HAYES
         case '3':
             Modem_flowControl = !Modem_flowControl;
             updateEEPROMByte(ADDR_MODEM_FLOW,Modem_flowControl);
             break;
 
-        case '4': ConfigureAutoStart();
+        case '4':
+            Modem_DCDFollowsRemoteCarrier = !Modem_DCDFollowsRemoteCarrier;
+
+            if (Modem_DCDFollowsRemoteCarrier) {
+              digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
+            }
+            else {
+              digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+            }
+            
+            updateEEPROMByte(ADDR_MODEM_DCD,Modem_DCDFollowsRemoteCarrier);
             break;
-#endif
+
+        case '5': ConfigureAutoStart();
+            break;
 
 /*      case '4': ConfigureBaud();
             break;*/
 
-        case '5': RawTerminalMode();
+        case '6': RawTerminalMode();
             return;
 
-        case '6': return;
+        case '7': return;
 
         case 8:
             SetPETSCIIMode(false);
@@ -674,7 +693,7 @@ void ShowInfo(boolean powerup)
 #ifdef HAYES
     if (!powerup) {
         char at_settings[20];
-        sprintf_P(at_settings, PSTR("ATE%dV%dQ%d&K%dS0=%d"),Modem_EchoOn,Modem_VerboseResponses,Modem_QuietMode,Modem_flowControl,Modem_S0_AutoAnswer);
+        sprintf_P(at_settings, PSTR("ATE%dV%dQ%d&C%d&K%dS0=%d"),Modem_EchoOn,Modem_VerboseResponses,Modem_QuietMode,Modem_DCDFollowsRemoteCarrier,Modem_flowControl,Modem_S0_AutoAnswer);
         C64Print(F("Init string: "));    C64Println(at_settings);
     }
 #endif
@@ -827,9 +846,8 @@ void Connect(String host, int port, boolean raw)
 #else
         DisplayBothP(temp);
 #endif
-#ifdef ENABLE_C64_DCD
-        digitalWriteFast(C64_DCD, false);
-#endif
+        if (Modem_DCDFollowsRemoteCarrier)
+            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
     }
     else
     {
@@ -839,6 +857,8 @@ void Connect(String host, int port, boolean raw)
 #else
         DisplayBoth(F("Connect Failed!"));
 #endif
+        if (Modem_DCDFollowsRemoteCarrier)
+            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
         return;
     }
 
@@ -945,9 +965,8 @@ void TerminalMode()
 #else
     DisplayBoth(F("Connection closed"));
 #endif
-#ifdef ENABLE_C64_DCD
-    digitalWriteFast(C64_DCD, false);
-#endif
+    if (Modem_DCDFollowsRemoteCarrier)
+        digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
 }
 
 // Raw Terminal Mode.  There is no escape.
@@ -1283,12 +1302,14 @@ void HayesEmulationMode()
     pinModeFast(C64_RI, OUTPUT);
     pinModeFast(C64_DSR, OUTPUT);
     pinModeFast(C64_DTR, OUTPUT);
-    pinModeFast(C64_DCD, OUTPUT);
+    //pinModeFast(C64_DCD, OUTPUT);
     pinModeFast(C64_RTS, INPUT);
 
     digitalWriteFast(C64_RI, LOW);
     digitalWriteFast(C64_DSR, HIGH);
-    digitalWriteFast(C64_DTR, Modem_ToggleCarrier(false));
+
+    if (Modem_DCDFollowsRemoteCarrier == true)
+      digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
 
     Modem_EscapeCount = 0;
 
@@ -1302,6 +1323,7 @@ void HayesEmulationMode()
     Modem_S0_AutoAnswer = EEPROM.read(ADDR_MODEM_S0_AUTOANS);
     Modem_S2_EscapeCharacter = EEPROM.read(ADDR_MODEM_S2_ESCAPE);
     Modem_isDcdInverted = EEPROM.read(ADDR_MODEM_DCD_INVERTED);
+    Modem_DCDFollowsRemoteCarrier = EEPROM.read(ADDR_MODEM_DCD);
     Modem_ResetCommandBuffer();
 
     C64Println();
@@ -1361,20 +1383,7 @@ void Modem_LoadDefaults(void)
     Modem_S2_EscapeCharacter = '+';
     Modem_isDcdInverted = false;
     Modem_flowControl = false;
-}
-
-
-int Modem_ToggleCarrier(boolean isHigh)
-{
-    int result = 0; //_isDcdInverted ? (isHigh ? LOW : HIGH) : (isHigh ? HIGH : LOW);
-    switch (Modem_isDcdInverted)
-    {
-    case 0: result = (int)(!isHigh); break;
-    case 1: result = (int)(isHigh); break;
-    case 2: result = LOW;
-    }
-   
-    return result;
+    Modem_DCDFollowsRemoteCarrier = false;
 }
 
 void Modem_Disconnect()
@@ -1399,7 +1408,8 @@ void Modem_Disconnect()
     if (wifly.available() == -1)
         wifly.close();
 
-    digitalWriteFast(C64_DTR, Modem_ToggleCarrier(false));
+    if (Modem_DCDFollowsRemoteCarrier)
+        digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
 }
 
 // Validate and handle AT sequence  (A/ was handled already)
@@ -1570,7 +1580,7 @@ void Modem_ProcessCommandBuffer()
         char numString[6];
         
         int localport = atoi(&Modem_CommandBuffer[8]);
-        if (localport >= 1 && localport <= 65535)
+        if (localport >= 0 && localport <= 65535)
         {
               setLocalPort(localport);
               Modem_PrintOK();
@@ -1754,6 +1764,33 @@ void Modem_ProcessCommandBuffer()
                 case '&':
                 switch(Modem_CommandBuffer[i++])
                 {
+                    case 'C':
+                    switch(Modem_CommandBuffer[i++])
+                    {
+                        case '0':
+                        Modem_DCDFollowsRemoteCarrier = false;
+                        digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+                        break;
+    
+                        case '1':
+                        Modem_DCDFollowsRemoteCarrier = true;
+                        if (Modem_isConnected) {
+                            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+                        }
+                        else {
+                            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
+                        }
+                        break;
+                        
+                        case '?':
+                        C64Serial.print(Modem_DCDFollowsRemoteCarrier);
+                        break;
+
+                        default:
+                        errors++;
+                    }
+                    break;
+
                     case 'F':
                     Modem_LoadDefaults();
                     break;
@@ -1789,7 +1826,7 @@ void Modem_ProcessCommandBuffer()
                     updateEEPROMByte(ADDR_MODEM_QUIET, Modem_QuietMode);
                     updateEEPROMByte(ADDR_MODEM_S0_AUTOANS, Modem_S0_AutoAnswer);
                     updateEEPROMByte(ADDR_MODEM_S2_ESCAPE, Modem_S2_EscapeCharacter);
-                    updateEEPROMByte(ADDR_MODEM_DCD_INVERTED, Modem_isDcdInverted);
+                    updateEEPROMByte(ADDR_MODEM_DCD, Modem_DCDFollowsRemoteCarrier);
                     
                     /*if (wifly.save())
                         Modem_PrintOK();
@@ -1956,7 +1993,8 @@ void Modem_Ring()
     {
         Modem_PrintResponse("2", F("RING"));
 
-        digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+        if (Modem_DCDFollowsRemoteCarrier)
+            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
 
         digitalWriteFast(C64_RI, HIGH);
         delay(250);
@@ -1971,7 +2009,8 @@ void Modem_Connected()
     
     DisplayBothP(temp);
 
-    digitalWriteFast(C64_DTR, Modem_ToggleCarrier(true));
+    if (Modem_DCDFollowsRemoteCarrier)
+        digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
 
     Modem_isConnected = true;
     Modem_isCommandMode = false;
@@ -2520,3 +2559,17 @@ boolean setLocalPort(int localport)
         }
     }
 }
+
+int Modem_ToggleCarrier(boolean isHigh)
+{
+    int result = 0; //_isDcdInverted ? (isHigh ? LOW : HIGH) : (isHigh ? HIGH : LOW);
+    switch (Modem_isDcdInverted)
+    {
+    case 0: result = (int)(!isHigh); break;
+    case 1: result = (int)(isHigh); break;
+    case 2: result = LOW;
+    }
+   
+    return result;
+}
+
