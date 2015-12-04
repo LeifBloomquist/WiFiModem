@@ -30,7 +30,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.06b1"
+#define VERSION "0.06"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
