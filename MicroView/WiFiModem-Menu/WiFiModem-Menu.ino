@@ -90,9 +90,29 @@ boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connec
 #define ADDR_MODEM_S2_ESCAPE    15
 #define ADDR_MODEM_DCD_INVERTED 16
 
-#define ADDR_HOST_AUTO    99     // Autostart host number
-#define ADDR_HOSTS         100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
-//#define ADDR_xxxxx         300
+#define ADDR_HOST_AUTO          99     // Autostart host number
+#define ADDR_HOSTS              100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
+//#define ADDR_xxxxx            300
+
+// Hayes variables
+#ifdef HAYES
+boolean Modem_isCommandMode = true;
+boolean Modem_isConnected = false;
+boolean Modem_isRinging = false;
+boolean Modem_EchoOn = true;
+//boolean Modem_EchoOn = true;
+boolean Modem_VerboseResponses = true;
+boolean Modem_QuietMode = false;
+boolean Modem_isDcdInverted = false;
+boolean Modem_S0_AutoAnswer = false;
+char    Modem_S2_EscapeCharacter = '+';
+#endif    // HAYES
+
+#define COMMAND_BUFFER_SIZE  81
+char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
+char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
+
+int Modem_EscapeCount = 0;
 
 // Misc Values
 #define TIMEDOUT  -1
@@ -232,6 +252,7 @@ int main(void)
 #endif    
 
 #ifndef HAYES        
+        Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
         HandleAutoStart();
 #endif  // HAYES
     
@@ -301,15 +322,17 @@ void Configuration()
 {
     while (true)
     {
+        char temp[30];
         C64Println();
         C64Println(F("Configuration Menu"));
         C64Println();
         C64Println(F("1. Display Current Configuration"));
         C64Println(F("2. Change SSID"));
-        C64Println(F("3. Autostart Options"));      
-        //C64Println(F("4. Change baud rate"));
-        C64Println(F("4. Direct Terminal Mode (Debug)"));
-        C64Println(F("5. Return to Main Menu"));
+        sprintf_P(temp,PSTR("3. %s flow control"),Modem_flowControl == true ? "Disable" : "Enable");        
+        C64Println(temp);      
+        C64Println(F("4. Autostart Options"));      
+        C64Println(F("5. Direct Terminal Mode (Debug)"));
+        C64Println(F("6. Return to Main Menu"));
         C64Println();
         C64Print(F("Select: "));
 
@@ -325,17 +348,22 @@ void Configuration()
             break;
 
 #ifndef HAYES
-        case '3': ConfigureAutoStart();
+        case '3':
+            Modem_flowControl = !Modem_flowControl;
+            updateEEPROMByte(ADDR_MODEM_FLOW,Modem_flowControl);
+            break;
+
+        case '4': ConfigureAutoStart();
             break;
 #endif
 
 /*      case '4': ConfigureBaud();
             break;*/
 
-        case '4': RawTerminalMode();
+        case '5': RawTerminalMode();
             return;
 
-        case '5': return;
+        case '6': return;
 
         case 8:
             SetPETSCIIMode(false);
@@ -425,19 +453,19 @@ void ChangeSSID()
         C64Println();
         C64Print(F("SSID:"));
         input = GetInput();
-        boolean ok = !wifly.setSSID(input.c_str());   // Note inverted, not sure why this has to be
-
-            if (ok)
+        wifly.setSSID(input.c_str());   // Note inverted, not sure why this has to be
+        wifly.save();
+        wifly.leave();
+            if (wifly.join(20000))    // 20 second timeout
             {
+                C64Println();
                 C64Println(F("SSID Successfully changed"));
-                wifly.save();
-                wifly.leave();
-                wifly.join(20000);    // 20 second timeout
                 return;
             }
             else
             {
-                C64Println(F("Error Setting SSID"));
+                C64Println();
+                C64Println(F("Error joining network"));
                 continue;
             }
     }
@@ -633,6 +661,7 @@ void ShowInfo(boolean powerup)
     char ip[20];
     char ssid[20];
 
+    wifly.getMAC(mac, 20);    // Sometimes the first time contains garbage..
     wifly.getMAC(mac, 20);
     wifly.getIP(ip, 20);
     wifly.getSSID(ssid, 20);
@@ -642,6 +671,13 @@ void ShowInfo(boolean powerup)
     C64Print(F("IP Address:  "));    C64Println(ip);
     C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
     C64Print(F("Firmware:    "));    C64Println(VERSION);
+#ifdef HAYES
+    if (!powerup) {
+        char at_settings[20];
+        sprintf_P(at_settings, PSTR("ATE%dV%dQ%d&K%dS0=%d"),Modem_EchoOn,Modem_VerboseResponses,Modem_QuietMode,Modem_flowControl,Modem_S0_AutoAnswer);
+        C64Print(F("Init string: "));    C64Println(at_settings);
+    }
+#endif
 
     if (powerup)
     {
@@ -683,13 +719,8 @@ void Incoming()
     if (strport.length() > 0)
     {
         localport = strport.toInt();
-        if(wifly.getPort() != localport) {
-            C64Println("Rebooting WiFly...");
-            wifly.setPort(localport);
-            wifly.save();
-            wifly.reboot();
-            delay(3000);
-        }
+        if (setLocalPort(localport))
+            while(1);            
     }
 
     localport = wifly.getPort();
@@ -1247,23 +1278,6 @@ void HandleAutoStart()
 // Simple Hayes Emulation
 // Portions of this code are adapted from Payton Byrd's Hayesduino - thanks!
 
-boolean Modem_isCommandMode = true;
-boolean Modem_isConnected = false;
-boolean Modem_isRinging = false;
-boolean Modem_EchoOn = true;
-//boolean Modem_EchoOn = true;
-boolean Modem_VerboseResponses = true;
-boolean Modem_QuietMode = false;
-boolean Modem_isDcdInverted = false;
-boolean Modem_S0_AutoAnswer = false;
-char    Modem_S2_EscapeCharacter = '+';
-
-#define COMMAND_BUFFER_SIZE  81
-char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
-char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
-
-int Modem_EscapeCount = 0;
-
 void HayesEmulationMode()
 {
     pinModeFast(C64_RI, OUTPUT);
@@ -1511,8 +1525,10 @@ void Modem_ProcessCommandBuffer()
             wifly.setSSID(Modem_LastCommandBuffer + 8);
         
         wifly.leave();
-        wifly.join(20000);    // 20 second timeout
-        Modem_PrintOK();
+        if(wifly.join(20000))    // 20 second timeout
+            Modem_PrintOK();
+        else
+            Modem_PrintERROR();
     }
     else if (strncmp(Modem_CommandBuffer, ("AT&PASS="), 8) == 0)
     {
@@ -1545,6 +1561,19 @@ void Modem_ProcessCommandBuffer()
             updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);
                         
             Modem_PrintOK();
+        }
+        else
+            Modem_PrintERROR();
+    }    
+    else if (strncmp(Modem_CommandBuffer, ("AT&PORT="), 8) == 0)
+    {
+        char numString[6];
+        
+        int localport = atoi(&Modem_CommandBuffer[8]);
+        if (localport >= 1 && localport <= 65535)
+        {
+              setLocalPort(localport);
+              Modem_PrintOK();
         }
         else
             Modem_PrintERROR();
@@ -2470,3 +2499,24 @@ void removeSpaces(char *temp)
   *p1 = 0;
 }
 
+boolean setLocalPort(int localport)
+{
+    if(wifly.getPort() != localport)
+    {
+        wifly.setPort(localport);
+        wifly.save();
+        //wifly.reboot();
+        //delay(5000);
+        
+        if (WiFly_BAUD_RATE != 2400) {
+            C64Println(F("Reboot Microview & WiFi to set new port."));
+            return true;
+        }
+        else {
+            C64Println(F("Rebooting WiFi..."));
+            wifly.reboot();
+            delay(5000);
+            return false;
+        }
+    }
+}
