@@ -163,7 +163,7 @@ int main(void)
     pinMode (C64_RxD, INPUT);
     digitalWrite (C64_RxD, HIGH);
 
-    Display(F("Baud\ndetection"));
+    Display(F("Baud\nDetection"));
 
     long detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
     // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
@@ -279,8 +279,9 @@ int main(void)
     
         ShowPETSCIIMode();
         C64Println(F("1. Telnet to host or BBS"));
-        C64Println(F("2. Wait for incoming connection"));
-        C64Println(F("3. Configuration"));
+        C64Println(F("2. Phone Book"));
+        C64Println(F("3. Wait for incoming connection"));
+        C64Println(F("4. Configuration"));
         C64Println();
         C64Print(F("Select: "));
     
@@ -294,10 +295,78 @@ int main(void)
             break;
     
         case '2':
+            {
+                char address[ADDR_HOST_SIZE];
+                char numString[2];
+
+                C64Println();
+                DisplayPhoneBook();
+                C64Print(F("Select: #, m to modify or 0 to go back: "));
+        
+                char addressChar = ReadByte(C64Serial);
+                if (addressChar == 'm' || addressChar == 'M')
+                {
+                    C64Print(F("\nEntry # to modify? (0 to abort): "));
+        
+                    char addressChar = ReadByte(C64Serial);
+  
+                    numString[0] = addressChar;
+                    numString[1] = '\0';
+                    int phoneBookNumber = atoi(numString);
+                    if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+                    {
+                        C64Serial.print(phoneBookNumber);
+                        switch (phoneBookNumber) {
+                            case 0:
+                            break;
+
+                            default:
+                            C64Print(F("\nEnter address: "));
+                            String hostName = GetInput();
+                            if (hostName.length() > 0)
+                            {
+                                updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), hostName);
+                            }
+                            else
+                                updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), "");
+                            
+                        }
+                    }
+                  
+                }
+                else 
+                {
+                    numString[0] = addressChar;
+                    numString[1] = '\0';
+                    int phoneBookNumber = atoi(numString);
+        
+                    if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+                    {
+                        switch (phoneBookNumber) {
+                            case 0:
+                            break;
+                            
+                            default:
+                            {
+                                strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+                                removeSpaces(address);
+                                Modem_Dialout(address);
+                            }
+        
+                            break;
+                        }
+        
+                    }
+                }    
+            }
+
+            break;
+
+        case '3':
             Incoming();
             break;
        
-        case '3':
+        case '4':
                 Configuration();
             break;
  
@@ -521,9 +590,10 @@ void DisplayBoth(String message)
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
 void DisplayBothP(const char *message)
 {
-    C64PrintlnP(message);
-    //message.replace(' ', '\n');
-    DisplayP(message);
+    String temp = message;
+    C64PrintlnP(temp.c_str());
+    temp.replace(' ', '\n');
+    DisplayP(temp.c_str());
 }
 
 
@@ -2073,12 +2143,32 @@ void Modem_ProcessData()
         // Command Mode -----------------------------------------------------------------------
         if (Modem_isCommandMode)
         {
+            unsigned char unsignedInbound;
+            boolean isValid = true;
+            char temp[5];
+            
             if (Modem_flowControl) 
                 digitalWriteFast(C64_CTS, LOW);
             //char inbound = toupper(_serial->read());
             char inbound = C64Serial.read();
 
-            if (Modem_EchoOn)
+            // Block non-ASCII/PETSCII characters
+            unsignedInbound = (unsigned char)inbound;
+            if (unsignedInbound == 0x08 || unsignedInbound == 0x0a || unsignedInbound == 0x0d) {}  // backspace, LF, CR
+            else if (unsignedInbound <= 0x1f)
+                isValid = false;
+            else if (unsignedInbound >= 0x80 && unsignedInbound <= 0xc0)
+                isValid = false;
+            else if (unsignedInbound >= 0xdb)
+                isValid = false;
+
+            /*
+            if (!isValid) {
+                sprintf(temp, "-%d-",unsignedInbound);
+                C64Serial.write(temp);
+            }*/
+
+            if (Modem_EchoOn && isValid)
             {
                 if (!Modem_flowControl) 
                 delay(100 / (BAUD_RATE / 2400));     // Slow down command mode to prevent garbage if flow control
@@ -2093,7 +2183,7 @@ void Modem_ProcessData()
                     Modem_CommandBuffer[strlen(Modem_CommandBuffer) - 1] = '\0';
                 }
             }
-            else if (inbound != '\r' && inbound != '\n' && inbound != Modem_S2_EscapeCharacter)
+            else if (inbound != '\r' && inbound != '\n' && inbound != Modem_S2_EscapeCharacter && isValid)
             {
                 if (strlen(Modem_CommandBuffer) >= COMMAND_BUFFER_SIZE) {
                   //Display (F("CMD Buf Overflow"));
@@ -2167,36 +2257,6 @@ void Modem_Answer()
     }
 
     Modem_Connected();
-}
-
-void Modem_Dialout(char* host)
-{
-    char* index;
-    uint16_t port = 23;
-    String hostname = String(host);
-
-        if (strlen(host) == 0)
-        {
-            Modem_PrintERROR();
-            return;
-        }
-    
-        if ((index = strstr(host, ":")) != NULL)
-        {
-            index[0] = '\0';
-            hostname = String(host);
-            port = atoi(index + 1);
-        }
-    /*if (hostname == F("5551212"))
-    {
-        QuantumLinkReloaded();
-        return;
-    }*/
-
-    lastHost = hostname;
-    lastPort = port;
-
-    Connect(hostname, port, false);
 }
 
 // Main processing loop for the virtual modem.  Needs refactoring!
@@ -2571,5 +2631,52 @@ int Modem_ToggleCarrier(boolean isHigh)
     }
    
     return result;
+}
+
+void DisplayPhoneBook() {
+    for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
+    {
+        C64Serial.print(i+1);
+        C64Print(F(":"));
+        C64Println(readEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE)));
+    }
+    C64Println();
+#ifdef HAYES    
+    C64Print(F("Autostart: "));
+    C64Serial.print(EEPROM.read(ADDR_HOST_AUTO));
+    C64Println();
+#endif
+}
+
+void Modem_Dialout(char* host)
+{
+    char* index;
+    uint16_t port = 23;
+    String hostname = String(host);
+
+        if (strlen(host) == 0)
+        {
+#ifdef HAYES
+            Modem_PrintERROR();
+#endif
+            return;
+        }
+    
+        if ((index = strstr(host, ":")) != NULL)
+        {
+            index[0] = '\0';
+            hostname = String(host);
+            port = atoi(index + 1);
+        }
+    /*if (hostname == F("5551212"))
+    {
+        QuantumLinkReloaded();
+        return;
+    }*/
+
+    lastHost = hostname;
+    lastPort = port;
+
+    Connect(hostname, port, false);
 }
 
