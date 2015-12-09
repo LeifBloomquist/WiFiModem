@@ -821,7 +821,7 @@ void ShowInfo(boolean powerup)
         Display(temp);
         delay(1000);
 
-        sprintf_P(temp, PSTR("Baud Rate\n\n%d"), BAUD_RATE);
+        sprintf_P(temp, PSTR("Baud Rate\n\n%u"), BAUD_RATE);
         Display(temp);
         delay(1000);
 
@@ -2027,7 +2027,7 @@ void Modem_Ring()
 void Modem_Connected()
 {
     char temp[20];
-    sprintf_P(temp, PSTR("CONNECT %d"), BAUD_RATE);
+    sprintf_P(temp, PSTR("CONNECT %u"), BAUD_RATE);
     
     DisplayBothP(temp);
 
@@ -2106,7 +2106,7 @@ void Modem_ProcessData()
 
             // Block non-ASCII/PETSCII characters
             unsignedInbound = (unsigned char)inbound;
-            if (unsignedInbound == 0x08 || unsignedInbound == 0x0a || unsignedInbound == 0x0d) {}  // backspace, LF, CR
+            if (unsignedInbound == 0x08 || unsignedInbound == 0x0a || unsignedInbound == 0x0d || unsignedInbound == 0x14) {}  // backspace, LF, CR, C= Delete
             else if (unsignedInbound <= 0x1f)
                 isValid = false;
             else if (unsignedInbound >= 0x80 && unsignedInbound <= 0xc0)
@@ -2114,8 +2114,8 @@ void Modem_ProcessData()
             else if (unsignedInbound >= 0xdb)
                 isValid = false;
 
-            /*
-            if (!isValid) {
+            // Do not delete this.  Used for troubleshooting...
+            /*if (!isValid) {
                 sprintf(temp, "-%d-",unsignedInbound);
                 C64Serial.write(temp);
             }*/
