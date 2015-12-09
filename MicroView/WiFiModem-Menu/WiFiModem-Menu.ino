@@ -33,9 +33,9 @@
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
-int BAUD_RATE=2400;
+unsigned int BAUD_RATE=2400;
 //#define BAUD_RATE 2400
-int WiFly_BAUD_RATE=2400;
+unsigned int WiFly_BAUD_RATE=2400;
 //#define WiFly_BAUD_RATE 2400
 #define MIN_FLOW_CONTROL_RATE 4800  // If BAUD rate is this speed or higher, RTS/CTS flow control is enabled.
 
@@ -72,13 +72,13 @@ boolean escapeReceived = false;
 #define ESCAPE_GUARD_TIME 1000
 
 char autoConnectHost = 0;
-boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connect once..
+//boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connect once..
 #define ADDR_HOST_SIZE     40
 #define ADDR_HOST_ENTRIES  9
     
 // EEPROM Addresses
 #define ADDR_PETSCII       0
-#define ADDR_AUTOSTART     1
+//#define ADDR_AUTOSTART     1
 #define ADDR_BAUD_LO       2
 #define ADDR_BAUD_HI       3
 #define ADDR_MODEM_ECHO         10
@@ -129,9 +129,9 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 #define AUTO_QLINK    3
 #define AUTO_CUSTOM   100   // TODO
 
-#ifndef HAYES
-byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
-#endif
+//#ifndef HAYES
+//byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
+//#endif
 
 // ----------------------------------------------------------
 // Arduino Setup Function
@@ -154,7 +154,7 @@ int main(void)
     }
     
     BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
-    if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200)
+    if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200 && BAUD_RATE != 38400)
         BAUD_RATE = 2400;
 
     //
@@ -174,7 +174,7 @@ int main(void)
     //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
     //Display(temp);
 
-    if (detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 || detectedBaudRate == 9600 || detectedBaudRate == 19200) {
+    if (detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 || detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400) {
         char temp[6];
         sprintf_P(temp, PSTR("%ld"), detectedBaudRate);
         Display(temp);
@@ -224,7 +224,8 @@ int main(void)
         //C64Serial.begin(BAUD_RATE);
 
         //delay(1000);
-
+        
+        C64Serial.println();
         DisplayBoth(F("Wi-Fi Init..."));
 
 #ifdef DEBUG
@@ -257,20 +258,20 @@ int main(void)
       
         wifly.close();
 
+        autoConnectHost = EEPROM.read(ADDR_HOST_AUTO);
 #ifndef HAYES        
         Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
         HandleAutoStart();
 #endif  // HAYES
     
-        C64Println();
+        //C64Println();
 #ifdef HAYES
-        C64Println(F("Commodore Wi-Fi Modem Hayes Emulation"));
+        C64Println(F("\nCommodore Wi-Fi Modem Hayes Emulation"));
         ShowPETSCIIMode();
         ShowInfo(true);
-        autoConnectHost = EEPROM.read(ADDR_HOST_AUTO);
         HayesEmulationMode();
 #else
-        C64Println(F("Commodore Wi-Fi Modem"));
+        C64Println(F("\nCommodore Wi-Fi Modem"));
         ShowInfo(true);
 
     while (1)
@@ -278,13 +279,20 @@ int main(void)
         Display(F("READY."));
     
         ShowPETSCIIMode();
-        C64Println(F("1. Telnet to host or BBS"));
+        C64Print(F("1. Telnet to host or BBS\n"
+                     "2. Phone Book\n"
+                     "3. Wait for incoming connection\n"
+                     "4. Configuration\n"
+                     "\n"
+                     "Select: "));
+
+        /*C64Println(F("1. Telnet to host or BBS"));
         C64Println(F("2. Phone Book"));
         C64Println(F("3. Wait for incoming connection"));
         C64Println(F("4. Configuration"));
         C64Println();
-        C64Print(F("Select: "));
-    
+        C64Print(F("Select: "));*/
+
         int option = ReadByte(C64Serial);
         C64Serial.println((char)option);
     
@@ -301,9 +309,11 @@ int main(void)
 
                 C64Println();
                 DisplayPhoneBook();
-                C64Print(F("Select: #, m to modify or 0 to go back: "));
+                C64Print(F("\nSelect: #, m to modify, a to set\nauto-start, 0 to go back: "));
         
                 char addressChar = ReadByte(C64Serial);
+                C64Serial.println((char)addressChar);
+                
                 if (addressChar == 'm' || addressChar == 'M')
                 {
                     C64Print(F("\nEntry # to modify? (0 to abort): "));
@@ -331,6 +341,28 @@ int main(void)
                                 updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), "");
                             
                         }
+                    }
+                }
+                else if (addressChar == 'a' || addressChar == 'A')
+                {
+                    C64Print(F("\nEntry # to set to auto-start?\n(0 to disable): "));
+        
+                    char addressChar = ReadByte(C64Serial);
+  
+                    numString[0] = addressChar;
+                    numString[1] = '\0';
+                    int phoneBookNumber = atoi(numString);
+                    if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+                    {
+                        C64Serial.print(phoneBookNumber);
+                        updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);   
+                        /*switch (phoneBookNumber) {
+                            case 0:
+                            break;
+
+                            default:
+                            updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);                            
+                        }*/
                     }
                   
                 }
@@ -398,20 +430,27 @@ void Configuration()
     while (true)
     {
         char temp[30];
-        C64Println();
-        C64Println(F("Configuration Menu"));
-        C64Println();
-        C64Println(F("1. Display Current Configuration"));
-        C64Println(F("2. Change SSID"));
+        C64Print(F("\n"
+                     "Configuration Menu\n"
+                     "\n"
+                     "1. Display Current Configuration\n"
+                     "2. Change SSID\n"));
+//        C64Println();
+//        C64Println(F("Configuration Menu"));
+//        C64Println();
+//        C64Println(F("1. Display Current Configuration"));
+//        C64Println(F("2. Change SSID"));
         sprintf_P(temp,PSTR("3. %s flow control"),Modem_flowControl == true ? "Disable" : "Enable");        
         C64Println(temp);      
         sprintf_P(temp,PSTR("4. %s DCD always on"),Modem_DCDFollowsRemoteCarrier == false ? "Disable" : "Enable");        
         C64Println(temp);      
-        C64Println(F("5. Autostart Options"));      
-        C64Println(F("6. Direct Terminal Mode (Debug)"));
-        C64Println(F("7. Return to Main Menu"));
-        C64Println();
-        C64Print(F("Select: "));
+        C64Print(F("5. Direct Terminal Mode (Debug)\n"
+                     "6. Return to Main Menu\n"
+                     "\nSelect: "));
+//        C64Println(F("5. Direct Terminal Mode (Debug)"));
+//        C64Println(F("6. Return to Main Menu"));
+//        C64Println();
+//        C64Print(F("Select: "));
 
         int option = ReadByte(C64Serial);
         C64Serial.println((char)option);
@@ -442,16 +481,13 @@ void Configuration()
             updateEEPROMByte(ADDR_MODEM_DCD,Modem_DCDFollowsRemoteCarrier);
             break;
 
-        case '5': ConfigureAutoStart();
-            break;
-
 /*      case '4': ConfigureBaud();
             break;*/
 
-        case '6': RawTerminalMode();
+        case '5': RawTerminalMode();
             return;
 
-        case '7': return;
+        case '6': return;
 
         case 8:
             SetPETSCIIMode(false);
@@ -478,14 +514,23 @@ void ChangeSSID()
 
     while (true)
     {
-        C64Println();
+        C64Println(F("\n"
+                     "Change SSID\n"
+                     "\n"
+                     "1. WEP\n"
+                     "2. WPA / WPA2\n"
+                     "3. Return to Configuration Menu\n"
+                     "\n"
+                     "Select: "));
+
+/*        C64Println();
         C64Println(F("Change SSID"));
         C64Println();
         C64Println(F("1. WEP"));
         C64Println(F("2. WPA / WPA2"));
         C64Println(F("3. Return to Configuration Menu"));
         C64Println();
-        C64Print(F("Select: "));
+        C64Print(F("Select: "));*/
 
         int option = ReadByte(C64Serial);
         C64Serial.println((char)option);
@@ -546,14 +591,14 @@ void ChangeSSID()
         wifly.leave();
             if (wifly.join(20000))    // 20 second timeout
             {
-                C64Println();
-                C64Println(F("SSID Successfully changed"));
+                //C64Println();
+                C64Println(F("\nSSID Successfully changed"));
                 return;
             }
             else
             {
-                C64Println();
-                C64Println(F("Error joining network"));
+                //C64Println();
+                C64Println(F("\nError joining network"));
                 continue;
             }
     }
@@ -638,7 +683,7 @@ void C64PrintlnP(const char *message)
     C64Serial.println();
 }
 
-inline void C64Println()
+void C64Println()
 {
     C64Serial.println();
 }
@@ -798,8 +843,8 @@ void Incoming()
 {
     int localport = wifly.getPort();
 
-    C64Println();
-    C64Print(F("Incoming port ("));
+    //C64Println();
+    C64Print(F("\nIncoming port ("));
     C64Serial.print(localport);
     C64Print(F("): "));
 
@@ -814,8 +859,8 @@ void Incoming()
 
     localport = wifly.getPort();
 
-    C64Println();
-    C64Print(F("Waiting for connection on port "));
+    //C64Println();
+    C64Print(F("\nWaiting for connection on port "));
     C64Serial.println(localport);
 
     // Idle here until connected
@@ -1212,152 +1257,34 @@ int PeekByte(Stream& in, unsigned int timeout)
 }
 
 #ifndef HAYES
-// ----------------------------------------------------------
-// Autoconnect Handling
-
-void ConfigureAutoStart()
-{
-    while (true)
-    {
-        C64Println();
-        C64Print(F("Autostart Menu (Current: "));
-        C64Serial.print(autostart_mode);
-        C64Println(F(")"));
-        C64Println();
-        C64Println(F("0. Clear Autostart Options"));
-#ifdef HAYES
-        C64Println(F("1. Hayes Emulation Mode"));
-        C64Println(F("2. CommodoreServer"));
-//        C64Println(F("3. QuantumLink Reloaded"));
-        C64Println(F("3. Return to Main Menu"));
-#else
-        C64Println(F("1. CommodoreServer"));
-//        C64Println(F("2. QuantumLink Reloaded"));
-        C64Println(F("2. Return to Main Menu"));
-#endif // HAYES
-
-        C64Println();
-        C64Print(F("Select: "));
-
-        int option = ReadByte(C64Serial);
-        C64Serial.println((char)option);
-
-        switch (option)
-        {
-        case '0': autostart_mode = AUTO_NONE;
-            break;
-#ifdef HAYES
-        case '1': autostart_mode = AUTO_HAYES;
-            break;
-
-        case '2': autostart_mode = AUTO_CSERVER;
-            break;
-
-//        case '3': autostart_mode = AUTO_QLINK;
-//            break;
-
-//        case '4': return;
-        case '3': return;
-#else
-        case '1': autostart_mode = AUTO_CSERVER;
-            break;
-
-//        case '2': autostart_mode = AUTO_QLINK;
-//            break;
-
-//        case '3': return;
-        case '2': return;
-#endif // HAYES
-
-        case 8:
-            SetPETSCIIMode(false);
-            continue;
-
-        case 20:
-            SetPETSCIIMode(true);
-            continue;
-
-        case '\n':
-        case '\r':
-        case ' ':
-            continue;
-
-        default: C64Println(F("Unknown option, try again"));
-            continue;
-        }
-
-        updateEEPROMByte(ADDR_AUTOSTART,autostart_mode);
-        C64Println(F("Saved"));
-    }
-}
-#endif // HAYES
-
-#ifndef HAYES
 void HandleAutoStart()
 {
     // Display chosen action
 
-    switch (autostart_mode)
+    if (autoConnectHost >=1 && autoConnectHost <= ADDR_HOST_ENTRIES)
     {
-        case AUTO_NONE:  // No Autostart, continue as normal
+        // Phonebook dial
+        char address[ADDR_HOST_SIZE];
+        
+        strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((autoConnectHost-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+
+        C64Print(F("Auto-connecting to:\n"));
+        C64Println(address);
+        
+        C64Println(F("\nPress any key to cancel..."));
+        // Wait for user to cancel
+
+        int option = PeekByte(C64Serial, 2000);
+
+        if (option != TIMEDOUT)   // Key pressed
+        {
+            ReadByte(C64Serial);    // eat character
             return;
-
-#ifdef HAYES
-        case AUTO_HAYES: // Hayes Emulation
-            C64Println(F("Entering Hayes Emulation Mode"));
-            break;
-
-#endif // HAYES
-        case AUTO_CSERVER: // Commodore Server
-            C64Println(F("Connecting to CommodoreServer"));
-            break;
-
-//        case AUTO_QLINK: // QuantumLink Reloaded
-//            C64Println(F("Ready to Connect to QuantumLink Reloaded"));          
-//            break;
-
-        default: // Invalid - on first startup or if corrupted.  Clear silently and continue to menu.
-            updateEEPROMByte(ADDR_AUTOSTART,AUTO_NONE);
-            autostart_mode = AUTO_NONE;
-            return;
-    }
-
-    // Wait for user to cancel
-
-    C64Println(F("Press any key to cancel..."));
-
-    int option = PeekByte(C64Serial, 2000);
-
-    if (option != TIMEDOUT)   // Key pressed
-    {
-        ReadByte(C64Serial);    // eat character
-        return;
-    }
-
-    // Take the chosen action
-
-    switch (autostart_mode)
-    {
-#ifdef HAYES
-        case AUTO_HAYES: // Hayes Emulation
-            HayesEmulationMode();
-            break;
-#endif // HAYES
-        case AUTO_CSERVER: // CommodoreServer - just connect repeatedly
-            while (true)
-            {
-                Connect(F("www.commodoreserver.com"), 1541, true);
-                delay(1000);
-            }
-            break;
-
-//        case AUTO_QLINK: // QuantumLink Reloaded
-//            // !!!! Not 100% sure what to do here.  Need 1200 baud.
-//            C64Println(F("TODO: Not Implemented!"));  //  !!!! TODO
-//            return;   // !!!!
-
-        default: // Shouldn't ever reach here.  Just continue to menu if so.
-            return;
+        }
+        
+        Modem_Dialout(address);
+        //Connect(F("www.commodoreserver.com"), 1541, true);
+        //delay(1000);
     }
 }
 #endif  // HAYES
@@ -1397,7 +1324,32 @@ void HayesEmulationMode()
     Modem_ResetCommandBuffer();
 
     C64Println();
-    DisplayBoth(F("OK"));
+    
+    if (autoConnectHost >=1 && autoConnectHost <= ADDR_HOST_ENTRIES)
+    {
+        // Phonebook dial
+        char address[ADDR_HOST_SIZE];
+        
+        strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((autoConnectHost-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+
+        C64Print(F("Auto-connecting to:\n"));
+        C64Println(address);
+        
+        C64Println(F("\nPress any key to cancel..."));
+        // Wait for user to cancel
+
+        int option = PeekByte(C64Serial, 2000);
+
+        if (option != TIMEDOUT)   // Key pressed
+        {
+            ReadByte(C64Serial);    // eat character
+            DisplayBoth(F("OK"));
+        }
+        else
+            Modem_Dialout(address);
+    }
+    else
+        DisplayBoth(F("OK"));
 
     while (true)
     {
@@ -2319,16 +2271,6 @@ void Modem_Loop()
     //	digitalWrite(DTE_RTS, LOW);
     //}
 
-    if (autoConnectHost >=1 && autoConnectHost <= ADDR_HOST_ENTRIES && !autoConnectedAtBootAlready)
-    {
-        // Phonebook dial
-        autoConnectedAtBootAlready = 1;
-        char address[ADDR_HOST_SIZE];
-        
-        strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((autoConnectHost-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
-        Modem_Dialout(address);
-    }
-
     // Handle all other data arriving on the serial port of the virtual modem.
     Modem_ProcessData();
 
@@ -2449,7 +2391,7 @@ void setBaud(int newBaudRate, boolean pause, boolean setup) {
         EEPROM.write(ADDR_BAUD_HI, b);
 }*/
 
-void setBaudWiFi(int newBaudRate) {
+void setBaudWiFi(unsigned int newBaudRate) {
   WiFly_BAUD_RATE = newBaudRate;
   WifiSerial.flush();
   delay(2);
@@ -2641,11 +2583,9 @@ void DisplayPhoneBook() {
         C64Println(readEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE)));
     }
     C64Println();
-#ifdef HAYES    
     C64Print(F("Autostart: "));
     C64Serial.print(EEPROM.read(ADDR_HOST_AUTO));
     C64Println();
-#endif
 }
 
 void Modem_Dialout(char* host)
