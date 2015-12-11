@@ -303,95 +303,7 @@ int main(void)
             break;
     
         case '2':
-            {
-                char address[ADDR_HOST_SIZE];
-                char numString[2];
-
-                C64Println();
-                DisplayPhoneBook();
-                C64Print(F("\nSelect: #, m to modify, a to set\nauto-start, 0 to go back: "));
-        
-                char addressChar = ReadByte(C64Serial);
-                C64Serial.println((char)addressChar);
-                
-                if (addressChar == 'm' || addressChar == 'M')
-                {
-                    C64Print(F("\nEntry # to modify? (0 to abort): "));
-        
-                    char addressChar = ReadByte(C64Serial);
-  
-                    numString[0] = addressChar;
-                    numString[1] = '\0';
-                    int phoneBookNumber = atoi(numString);
-                    if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
-                    {
-                        C64Serial.print(phoneBookNumber);
-                        switch (phoneBookNumber) {
-                            case 0:
-                            break;
-
-                            default:
-                            C64Print(F("\nEnter address: "));
-                            String hostName = GetInput();
-                            if (hostName.length() > 0)
-                            {
-                                updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), hostName);
-                            }
-                            else
-                                updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), "");
-                            
-                        }
-                    }
-                }
-                else if (addressChar == 'a' || addressChar == 'A')
-                {
-                    C64Print(F("\nEntry # to set to auto-start?\n(0 to disable): "));
-        
-                    char addressChar = ReadByte(C64Serial);
-  
-                    numString[0] = addressChar;
-                    numString[1] = '\0';
-                    int phoneBookNumber = atoi(numString);
-                    if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
-                    {
-                        C64Serial.print(phoneBookNumber);
-                        updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);   
-                        /*switch (phoneBookNumber) {
-                            case 0:
-                            break;
-
-                            default:
-                            updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);                            
-                        }*/
-                    }
-                  
-                }
-                else 
-                {
-                    numString[0] = addressChar;
-                    numString[1] = '\0';
-                    int phoneBookNumber = atoi(numString);
-        
-                    if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
-                    {
-                        switch (phoneBookNumber) {
-                            case 0:
-                            break;
-                            
-                            default:
-                            {
-                                strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
-                                removeSpaces(address);
-                                Modem_Dialout(address);
-                            }
-        
-                            break;
-                        }
-        
-                    }
-                }    
-            }
-
+            PhoneBook();
             break;
 
         case '3':
@@ -603,6 +515,99 @@ void ChangeSSID()
             }
     }
 }
+void PhoneBook()
+{
+  while(true)
+    {
+        char address[ADDR_HOST_SIZE];
+        char numString[2];
+
+        C64Println();
+        DisplayPhoneBook();
+        C64Print(F("\nSelect: #, m to modify, a to set\nauto-start, 0 to go back: "));
+
+        char addressChar = ReadByte(C64Serial);
+        C64Serial.println((char)addressChar);
+        
+        if (addressChar == 'm' || addressChar == 'M')
+        {
+            C64Print(F("\nEntry # to modify? (0 to abort): "));
+
+            char addressChar = ReadByte(C64Serial);
+  
+            numString[0] = addressChar;
+            numString[1] = '\0';
+            int phoneBookNumber = atoi(numString);
+            if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+            {
+                C64Serial.print(phoneBookNumber);
+                switch (phoneBookNumber) {
+                    case 0:
+                    break;
+
+                    default:
+                    C64Print(F("\nEnter address: "));
+                    String hostName = GetInput();
+                    if (hostName.length() > 0)
+                    {
+                        updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), hostName);
+                    }
+                    else
+                        updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), "");
+                    
+                }
+            }
+        }
+        else if (addressChar == 'a' || addressChar == 'A')
+        {
+            C64Print(F("\nEntry # to set to auto-start?\n(0 to disable): "));
+
+            char addressChar = ReadByte(C64Serial);
+  
+            numString[0] = addressChar;
+            numString[1] = '\0';
+            int phoneBookNumber = atoi(numString);
+            if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+            {
+                C64Serial.print(phoneBookNumber);
+                updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);   
+                /*switch (phoneBookNumber) {
+                    case 0:
+                    break;
+
+                    default:
+                    updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);                            
+                }*/
+            }
+          
+        }
+        else 
+        {
+            numString[0] = addressChar;
+            numString[1] = '\0';
+            int phoneBookNumber = atoi(numString);
+
+            if (phoneBookNumber >=0 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+            {
+                switch (phoneBookNumber) {
+                    case 0:
+                    return;
+                    
+                    default:
+                    {
+                        strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+                        removeSpaces(address);
+                        Modem_Dialout(address);
+                    }
+
+                    break;
+                }
+
+            }
+        }    
+    }
+}
+
 #endif  // HAYES
 
 // ----------------------------------------------------------
