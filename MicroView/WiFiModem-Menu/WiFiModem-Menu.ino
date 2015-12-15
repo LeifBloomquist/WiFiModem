@@ -6,8 +6,9 @@
 
 /* TODO
  *  set ip tcp-mode 0x10 to disable remote configuration
- *  wifly.setBroadcastInterval(0);
- *  wifly.setDeviceID("Wifi-Modem");
+ *  CheckTelnet() for inbound
+ *  ATH1 handling
+ *  +++ guard time for inboun
  *  
  *  
  *  
@@ -29,7 +30,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.07b2"
+#define VERSION "0.07b3"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -880,7 +881,7 @@ void Incoming()
     // Idle here until connected
     while (!wifly.isConnected())  {}
     C64Println(F("Incoming Connection"));
-    //CheckTelnet();
+    CheckTelnet();
     TerminalMode();
 }
 // ----------------------------------------------------------
@@ -1749,9 +1750,23 @@ void Modem_ProcessCommandBuffer()
                 break;
 
                 case 'H':
-                if (Modem_CommandBuffer[i+1] == '0')
-                  Modem_CommandBuffer[i++]; 
+                switch(Modem_CommandBuffer[i++])
+                {
+                    case '0':
+                    suppressOkError = true;
                     Modem_Disconnect();
+                    break;
+
+                    /*case '1':
+                    // Future
+                    break;*/
+
+                    default:
+                    i--;                        // User entered ATH
+                    suppressOkError = true;
+                    Modem_Disconnect();
+                    break;
+                }
                 break;
                 
                 case 'Q':
@@ -2092,7 +2107,7 @@ void Modem_Connected()
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
 
-    //CheckTelnet();
+    CheckTelnet();
      
     Modem_isConnected = true;
     Modem_isCommandMode = false;
