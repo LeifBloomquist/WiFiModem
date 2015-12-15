@@ -18,7 +18,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-//#define HAYES
+#define HAYES
 #include <MicroView.h>
 #include <elapsedMillis.h>
 #include <SoftwareSerial.h>
@@ -267,13 +267,13 @@ int main(void)
    
     //C64Println();
 #ifdef HAYES
-    C64Println(F("\nCommodore Wi-Fi Modem Hayes Emulation"));
+    C64Println(F("\r\nCommodore Wi-Fi Modem Hayes Emulation"));
     ShowPETSCIIMode();
     C64Println();
     ShowInfo(true);
     HayesEmulationMode();
 #else
-    C64Println(F("\nCommodore Wi-Fi Modem"));
+    C64Println(F("\r\nCommodore Wi-Fi Modem"));
     C64Println();
     ShowInfo(true);
 
@@ -282,11 +282,11 @@ while (1)
     Display(F("READY."));
 
     ShowPETSCIIMode();
-    C64Print(F("1. Telnet to host or BBS\n"
-                 "2. Phone Book\n"
-                 "3. Wait for incoming connection\n"
-                 "4. Configuration\n"
-                 "\n"
+    C64Print(F("1. Telnet to host or BBS\r\n"
+                 "2. Phone Book\r\n"
+                 "3. Wait for incoming connection\r\n"
+                 "4. Configuration\r\n"
+                 "\r\n"
                  "Select: "));
 
     /*C64Println(F("1. Telnet to host or BBS"));
@@ -346,11 +346,11 @@ void Configuration()
     while (true)
     {
         char temp[30];
-        C64Print(F("\n"
-                     "Configuration Menu\n"
-                     "\n"
-                     "1. Display Current Configuration\n"
-                     "2. Change SSID\n"));
+        C64Print(F("\r\n"
+                     "Configuration Menu\r\n"
+                     "\r\n"
+                     "1. Display Current Configuration\r\n"
+                     "2. Change SSID\r\n"));
 //        C64Println();
 //        C64Println(F("Configuration Menu"));
 //        C64Println();
@@ -360,9 +360,9 @@ void Configuration()
         C64Println(temp);      
         sprintf_P(temp,PSTR("4. %s DCD always on"),Modem_DCDFollowsRemoteCarrier == false ? "Disable" : "Enable");        
         C64Println(temp);      
-        C64Print(F("5. Direct Terminal Mode (Debug)\n"
-                     "6. Return to Main Menu\n"
-                     "\nSelect: "));
+        C64Print(F("5. Direct Terminal Mode (Debug)\r\n"
+                     "6. Return to Main Menu\r\n"
+                     "\r\nSelect: "));
 //        C64Println(F("5. Direct Terminal Mode (Debug)"));
 //        C64Println(F("6. Return to Main Menu"));
 //        C64Println();
@@ -430,13 +430,13 @@ void ChangeSSID()
 
     while (true)
     {
-        C64Println(F("\n"
-                     "Change SSID\n"
-                     "\n"
-                     "1. WEP\n"
-                     "2. WPA / WPA2\n"
-                     "3. Return to Configuration Menu\n"
-                     "\n"
+        C64Println(F("\r\n"
+                     "Change SSID\r\n"
+                     "\r\n"
+                     "1. WEP\r\n"
+                     "2. WPA / WPA2\r\n"
+                     "3. Return to Configuration Menu\r\n"
+                     "\r\n"
                      "Select: "));
 
 /*        C64Println();
@@ -508,13 +508,13 @@ void ChangeSSID()
             if (wifly.join(20000))    // 20 second timeout
             {
                 //C64Println();
-                C64Println(F("\nSSID Successfully changed"));
+                C64Println(F("\r\nSSID Successfully changed"));
                 return;
             }
             else
             {
                 //C64Println();
-                C64Println(F("\nError joining network"));
+                C64Println(F("\r\nError joining network"));
                 continue;
             }
     }
@@ -528,14 +528,14 @@ void PhoneBook()
 
         C64Println();
         DisplayPhoneBook();
-        C64Print(F("\nSelect: #, m to modify, a to set\nauto-start, 0 to go back: "));
+        C64Print(F("\r\nSelect: #, m to modify, a to set\r\n""auto-start, 0 to go back: "));
 
         char addressChar = ReadByte(C64Serial);
         C64Serial.println((char)addressChar);
         
         if (addressChar == 'm' || addressChar == 'M')
         {
-            C64Print(F("\nEntry # to modify? (0 to abort): "));
+            C64Print(F("\r\nEntry # to modify? (0 to abort): "));
 
             char addressChar = ReadByte(C64Serial);
   
@@ -550,7 +550,7 @@ void PhoneBook()
                     break;
 
                     default:
-                    C64Print(F("\nEnter address: "));
+                    C64Print(F("\r\nEnter address: "));
                     String hostName = GetInput();
                     if (hostName.length() > 0)
                     {
@@ -564,7 +564,7 @@ void PhoneBook()
         }
         else if (addressChar == 'a' || addressChar == 'A')
         {
-            C64Print(F("\nEntry # to set to auto-start?\n(0 to disable): "));
+            C64Print(F("\r\nEntry # to set to auto-start?\r\n""(0 to disable): "));
 
             char addressChar = ReadByte(C64Serial);
   
@@ -803,12 +803,12 @@ void ShowInfo(boolean powerup)
     char mac[20];
     char ip[20];
     char ssid[20];
-    WiFlyLocalPort = wifly.getPort();   // Port WiFly listens on.  0 = disabled.
         
     wifly.getMAC(mac, 20);    // Sometimes the first time contains garbage..
     wifly.getMAC(mac, 20);
     wifly.getIP(ip, 20);
     wifly.getSSID(ssid, 20);
+    WiFlyLocalPort = wifly.getPort();   // Port WiFly listens on.  0 = disabled.
 
     //C64Println();
     C64Print(F("MAC Address: "));    C64Println(mac);
@@ -855,7 +855,7 @@ void Incoming()
     int localport = WiFlyLocalPort;
 
     //C64Println();
-    C64Print(F("\nIncoming port ("));
+    C64Print(F("\r\nIncoming port ("));
     C64Serial.print(localport);
     C64Print(F("): "));
 
@@ -870,7 +870,7 @@ void Incoming()
 
     WiFlyLocalPort = localport;
 
-    C64Print(F("\nWaiting for connection on port "));
+    C64Print(F("\r\nWaiting for connection on port "));
     C64Serial.println(WiFlyLocalPort);
 
     /* Force close any connections that were made before we started listening, as 
@@ -891,7 +891,7 @@ void DoTelnet()
 {
     int port = lastPort;
 
-    C64Print(F("\nTelnet host ("));
+    C64Print(F("\r\nTelnet host ("));
     C64Print(lastHost);
     C64Print(F("): "));
     String hostName = GetInput();
@@ -923,7 +923,7 @@ void DoTelnet()
 
 int getPort(void)
 {
-    C64Print(F("\nPort ("));
+    C64Print(F("\r\nPort ("));
     C64Serial.print(lastPort);
     C64Print(F("): "));
     
@@ -945,7 +945,7 @@ int getPort(void)
 void Connect(String host, int port, boolean raw)
 {
     char temp[50];
-    sprintf_P(temp, PSTR("\nConnecting to %s"), host.c_str());
+    sprintf_P(temp, PSTR("\r\nConnecting to %s"), host.c_str());
 #ifdef HAYES
     DisplayP(temp);
 #else
@@ -1293,10 +1293,10 @@ void HandleAutoStart()
         
         strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((autoConnectHost-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
 
-        C64Print(F("Auto-connecting to:\n"));
+        C64Print(F("Auto-connecting to:\r\n"));
         C64Println(address);
         
-        C64Println(F("\nPress any key to cancel..."));
+        C64Println(F("\r\nPress any key to cancel..."));
         // Wait for user to cancel
 
         int option = PeekByte(C64Serial, 2000);
@@ -1357,10 +1357,10 @@ void HayesEmulationMode()
         
         strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((autoConnectHost-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
 
-        C64Print(F("Auto-connecting to:\n"));
+        C64Print(F("Auto-connecting to:\r\n"));
         C64Println(address);
         
-        C64Println(F("\nPress any key to cancel..."));
+        C64Println(F("\r\nPress any key to cancel..."));
         // Wait for user to cancel
 
         int option = PeekByte(C64Serial, 2000);
@@ -1368,13 +1368,21 @@ void HayesEmulationMode()
         if (option != TIMEDOUT)   // Key pressed
         {
             ReadByte(C64Serial);    // eat character
-            DisplayBoth(F("OK"));
+            //DisplayBoth(F("OK"));
+            Display(F("OK"));
+            C64Serial.print(F("OK"));
+            C64Serial.println();
         }
         else
             Modem_Dialout(address);
     }
     else
-        DisplayBoth(F("OK"));
+    {
+        //DisplayBoth(F("OK"));
+        Display(F("OK"));
+        C64Serial.print(F("OK"));
+        C64Serial.println();
+    }
 
     while (true)
     {
@@ -1393,6 +1401,7 @@ inline void Modem_PrintERROR()
     Modem_PrintResponse("4", F("ERROR"));
 }
 
+/* Modem response codes should be in ASCII.  Do not translate to PETSCII. */
 void Modem_PrintResponse(const char* code, const __FlashStringHelper * msg)
 {
     //C64Println();  // Moved to top of Modem_ProcessCommandBuffer() so that 
@@ -1401,9 +1410,17 @@ void Modem_PrintResponse(const char* code, const __FlashStringHelper * msg)
     if (!Modem_QuietMode)
     {
         if (Modem_VerboseResponses)
-            C64Println(msg);
+        {
+            //C64Println(msg);
+            C64Serial.print(msg);
+            C64Serial.println();
+        }
         else
-            C64Println(code);
+        {
+            //C64Println(code);
+            C64Serial.print(code);
+            C64Serial.println();
+        }
     }
 
     // Always show verbose version on OLED, underneath command
@@ -1441,8 +1458,6 @@ void Modem_Disconnect()
     Modem_isConnected = false;
     Modem_isRinging = false;    
 
-    delay(500);
-    Modem_PrintResponse("3", F("NO CARRIER"));
     //sprintf_P(temp, PSTR("\r\nNO CARRIER\r\n"));
     //DisplayBothP(temp);
     //DisplayP(temp);
@@ -1456,6 +1471,9 @@ void Modem_Disconnect()
         wifly.closeForce();      // Incoming connections need to be force closed.  close()
                                  // does not work because WiFlyHQ.cpp connected variable is
                                  // not set for incoming connections.
+
+    //delay(500);
+    Modem_PrintResponse("3", F("NO CARRIER"));
 
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
@@ -1658,10 +1676,16 @@ void Modem_ProcessCommandBuffer()
     }
     else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR")) != NULL)
     {
-        for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
+#define STATIC_PB_ENTRIES  2
+        for (int i = 0; i < ADDR_HOST_ENTRIES - STATIC_PB_ENTRIES; i++)
         {
             updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
         }
+
+        // To add static entries, update STATIC_PB_ENTRIES and add entries below increased x: ADDR_HOST_ENTRIES - x
+        updateEEPROMPhoneBook(ADDR_HOSTS + (ADDR_HOST_ENTRIES - 1 * ADDR_HOST_SIZE), F("WWW.COMMODORESERVER.COM:1541"));   // last entry
+        updateEEPROMPhoneBook(ADDR_HOSTS + (ADDR_HOST_ENTRIES - 2 * ADDR_HOST_SIZE), F("WWW.JAMMINGSIGNAL.COM:23"));       // second last entry
+                
         updateEEPROMByte(ADDR_HOST_AUTO, 0);
         Modem_PrintOK();
     }
@@ -2132,8 +2156,6 @@ void Modem_ProcessData()
         if (Modem_isCommandMode)
         {
             unsigned char unsignedInbound;
-            boolean isValid = true;
-            char temp[5];
             
             if (Modem_flowControl) 
                 digitalWriteFast(C64_CTS, LOW);
@@ -2142,21 +2164,21 @@ void Modem_ProcessData()
 
             // Block non-ASCII/PETSCII characters
             unsignedInbound = (unsigned char)inbound;
-            if (unsignedInbound == 0x08 || unsignedInbound == 0x0a || unsignedInbound == 0x0d || unsignedInbound == 0x14) {}  // backspace, LF, CR, C= Delete
-            else if (unsignedInbound <= 0x1f)
-                isValid = false;
-            else if (unsignedInbound >= 0x80 && unsignedInbound <= 0xc0)
-                isValid = false;
-            else if (unsignedInbound >= 0xdb)
-                isValid = false;
 
             // Do not delete this.  Used for troubleshooting...
-            /*if (!isValid) {
-                sprintf(temp, "-%d-",unsignedInbound);
-                C64Serial.write(temp);
-            }*/
+            /*char temp[5];
+            sprintf(temp, "-%d-",unsignedInbound);
+            C64Serial.write(temp);*/
+            
+            if (unsignedInbound == 0x08 || unsignedInbound == 0x0a || unsignedInbound == 0x0d || unsignedInbound == 0x14) {}  // backspace, LF, CR, C= Delete
+            else if (unsignedInbound <= 0x1f)
+                break;
+            else if (unsignedInbound >= 0x80 && unsignedInbound <= 0xc0)
+                break;
+            else if (unsignedInbound >= 0xdb)
+                break;
 
-            if (Modem_EchoOn && isValid)
+            if (Modem_EchoOn)
             {
                 if (!Modem_flowControl) 
                   delay(100 / (BAUD_RATE / 2400));     // Slow down command mode to prevent garbage if flow control
@@ -2172,7 +2194,7 @@ void Modem_ProcessData()
                     Modem_CommandBuffer[strlen(Modem_CommandBuffer) - 1] = '\0';
                 }
             }
-            else if (inbound != '\r' && inbound != '\n' && inbound != Modem_S2_EscapeCharacter && isValid)
+            else if (inbound != '\r' && inbound != '\n' && inbound != Modem_S2_EscapeCharacter)
             {
                 if (strlen(Modem_CommandBuffer) >= COMMAND_BUFFER_SIZE) {
                   //Display (F("CMD Buf Overflow"));
@@ -2590,7 +2612,7 @@ boolean setLocalPort(int localport)
         //delay(5000);
         
         if (WiFly_BAUD_RATE != 2400) {
-            C64Println(F("Reboot Microview & WiFi to set new port."));
+            C64Println(F("Reboot MicroView & WiFi to set new port."));
             return true;
         }
         else {
