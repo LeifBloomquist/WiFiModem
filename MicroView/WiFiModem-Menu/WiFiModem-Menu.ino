@@ -29,7 +29,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.07b1"
+#define VERSION "0.07b2"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -118,6 +118,7 @@ boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 boolean Modem_flowControl = false;   // for &K setting.
 boolean Modem_isDcdInverted = false;
 boolean Modem_DCDFollowsRemoteCarrier = false;    // &C
+int WiFlyLocalPort = 0;
 
 // PETSCII state
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
@@ -195,143 +196,146 @@ int main(void)
     // Baud rate detection end
     //
 
-        C64Serial.begin(BAUD_RATE);
-        WifiSerial.begin(WiFly_BAUD_RATE);
-    
-        C64Serial.setTimeout(1000);
+    C64Serial.begin(BAUD_RATE);
+    WifiSerial.begin(WiFly_BAUD_RATE);
 
-        baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
+    C64Serial.setTimeout(1000);
 
-        // Always setup pins for flow control
-        pinModeFast(C64_RTS, INPUT);
-        pinModeFast(C64_CTS, OUTPUT);
-    
-        pinModeFast(WIFI_RTS, INPUT);
-        pinModeFast(WIFI_CTS, OUTPUT);
-    
-        // Force CTS to defaults on both sides to start, so data can get through
-        digitalWriteFast(WIFI_CTS, LOW);
-        digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
+    baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 
-        //WifiSerial.begin(WiFly_BAUD_RATE);
+    // Always setup pins for flow control
+    pinModeFast(C64_RTS, INPUT);
+    pinModeFast(C64_CTS, OUTPUT);
+
+    pinModeFast(WIFI_RTS, INPUT);
+    pinModeFast(WIFI_CTS, OUTPUT);
+
+    // Force CTS to defaults on both sides to start, so data can get through
+    digitalWriteFast(WIFI_CTS, LOW);
+    digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
+
+    //WifiSerial.begin(WiFly_BAUD_RATE);
 
   /*
-        BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
-        if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 9600 && BAUD_RATE != 38400)
-            BAUD_RATE = 2400;
+    BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
+    if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 9600 && BAUD_RATE != 38400)
+        BAUD_RATE = 2400;
   */
 
-        //C64Serial.begin(BAUD_RATE);
+    //C64Serial.begin(BAUD_RATE);
 
-        //delay(1000);
-        
-        C64Serial.println();
-        DisplayBoth(F("Wi-Fi Init..."));
+    //delay(1000);
+    
+    C64Serial.println();
+    DisplayBoth(F("Wi-Fi Init..."));
 
 #ifdef DEBUG
-        boolean ok = wifly.begin(&WifiSerial, &C64Serial);
+    boolean ok = wifly.begin(&WifiSerial, &C64Serial);
 #else
-        boolean ok = wifly.begin(&WifiSerial);
+    boolean ok = wifly.begin(&WifiSerial);
 #endif
-    
-        if (ok)
-        {
-            DisplayBoth(F("Wi-Fi OK!"));
-        }
-        else
-        {
-            DisplayBoth(F("Wi-Fi Failed!"));
-            RawTerminalMode();
-        }
 
-        // Enable DNS caching, TCP retry, TCP_NODELAY, TCP connection status
-            wifly.setIpFlags(16 && 4 && 2 && 1);
-    
-        if (BAUD_RATE != 2400) {
-            delay(1000);
-            if(BAUD_RATE == 1200)
-                setBaudWiFi(2400);
-            else
-                setBaudWiFi(BAUD_RATE);
-        }
-        baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
-      
-        wifly.close();
-
-        autoConnectHost = EEPROM.read(ADDR_HOST_AUTO);
-#ifndef HAYES        
-        Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
-        HandleAutoStart();
-#endif  // HAYES
-    
-        //C64Println();
-#ifdef HAYES
-        C64Println(F("\nCommodore Wi-Fi Modem Hayes Emulation"));
-        ShowPETSCIIMode();
-        ShowInfo(true);
-        HayesEmulationMode();
-#else
-        C64Println(F("\nCommodore Wi-Fi Modem"));
-        ShowInfo(true);
-
-    while (1)
+    if (ok)
     {
-        Display(F("READY."));
-    
-        ShowPETSCIIMode();
-        C64Print(F("1. Telnet to host or BBS\n"
-                     "2. Phone Book\n"
-                     "3. Wait for incoming connection\n"
-                     "4. Configuration\n"
-                     "\n"
-                     "Select: "));
-
-        /*C64Println(F("1. Telnet to host or BBS"));
-        C64Println(F("2. Phone Book"));
-        C64Println(F("3. Wait for incoming connection"));
-        C64Println(F("4. Configuration"));
-        C64Println();
-        C64Print(F("Select: "));*/
-
-        int option = ReadByte(C64Serial);
-        C64Serial.println((char)option);
-    
-        switch (option)
-        {
-        case '1':
-            DoTelnet();
-            break;
-    
-        case '2':
-            PhoneBook();
-            break;
-
-        case '3':
-            Incoming();
-            break;
-       
-        case '4':
-                Configuration();
-            break;
- 
-        case '\n':
-        case '\r':
-        case ' ':
-            break;
-    
-        case 8:
-            SetPETSCIIMode(false);
-            break;
-    
-        case 20:
-            SetPETSCIIMode(true);
-            break;
-    
-        default:
-            C64Println(F("Unknown option, try again"));
-            break;
-        }
+        DisplayBoth(F("Wi-Fi OK!"));
     }
+    else
+    {
+        DisplayBoth(F("Wi-Fi Failed!"));
+        RawTerminalMode();
+    }
+
+    // Enable DNS caching, TCP retry, TCP_NODELAY, TCP connection status
+    wifly.setIpFlags(16 && 4 && 2 && 1);
+
+        if (BAUD_RATE != 2400) {
+        delay(1000);
+        if(BAUD_RATE == 1200)
+            setBaudWiFi(2400);
+        else
+            setBaudWiFi(BAUD_RATE);
+        }
+    baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
+  
+    wifly.close();
+
+    autoConnectHost = EEPROM.read(ADDR_HOST_AUTO);
+#ifndef HAYES        
+    Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
+    HandleAutoStart();
+#endif  // HAYES
+   
+    //C64Println();
+#ifdef HAYES
+    C64Println(F("\nCommodore Wi-Fi Modem Hayes Emulation"));
+    ShowPETSCIIMode();
+    C64Println();
+    ShowInfo(true);
+    HayesEmulationMode();
+#else
+    C64Println(F("\nCommodore Wi-Fi Modem"));
+    C64Println();
+    ShowInfo(true);
+
+while (1)
+{
+    Display(F("READY."));
+
+    ShowPETSCIIMode();
+    C64Print(F("1. Telnet to host or BBS\n"
+                 "2. Phone Book\n"
+                 "3. Wait for incoming connection\n"
+                 "4. Configuration\n"
+                 "\n"
+                 "Select: "));
+
+    /*C64Println(F("1. Telnet to host or BBS"));
+    C64Println(F("2. Phone Book"));
+    C64Println(F("3. Wait for incoming connection"));
+    C64Println(F("4. Configuration"));
+    C64Println();
+    C64Print(F("Select: "));*/
+
+    int option = ReadByte(C64Serial);
+    C64Serial.println((char)option);
+
+    switch (option)
+    {
+    case '1':
+        DoTelnet();
+        break;
+
+    case '2':
+        PhoneBook();
+        break;
+
+    case '3':
+        Incoming();
+        break;
+   
+    case '4':
+            Configuration();
+        break;
+ 
+    case '\n':
+    case '\r':
+    case ' ':
+        break;
+
+    case 8:
+        SetPETSCIIMode(false);
+        break;
+
+    case 20:
+        SetPETSCIIMode(true);
+        break;
+
+    default:
+        C64Println(F("Unknown option, try again"));
+        break;
+    }
+}
+
 
 #endif // HAYES
 }
@@ -799,17 +803,19 @@ void ShowInfo(boolean powerup)
     char mac[20];
     char ip[20];
     char ssid[20];
-
+    WiFlyLocalPort = wifly.getPort();   // Port WiFly listens on.  0 = disabled.
+        
     wifly.getMAC(mac, 20);    // Sometimes the first time contains garbage..
     wifly.getMAC(mac, 20);
     wifly.getIP(ip, 20);
     wifly.getSSID(ssid, 20);
 
-    C64Println();
+    //C64Println();
     C64Print(F("MAC Address: "));    C64Println(mac);
     C64Print(F("IP Address:  "));    C64Println(ip);
     C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
     C64Print(F("Firmware:    "));    C64Println(VERSION);
+    C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
 #ifdef HAYES
     if (!powerup) {
         char at_settings[20];
@@ -846,7 +852,7 @@ void ShowInfo(boolean powerup)
 
 void Incoming()
 {
-    int localport = wifly.getPort();
+    int localport = WiFlyLocalPort;
 
     //C64Println();
     C64Print(F("\nIncoming port ("));
@@ -862,17 +868,19 @@ void Incoming()
             while(1);            
     }
 
-    localport = wifly.getPort();
+    WiFlyLocalPort = localport;
 
-    //C64Println();
     C64Print(F("\nWaiting for connection on port "));
-    C64Serial.println(localport);
+    C64Serial.println(WiFlyLocalPort);
 
+    /* Force close any connections that were made before we started listening, as 
+     * the WiFly is always listening and accepting connections if a local port 
+     * is defined.  */
+    wifly.closeForce();
     // Idle here until connected
     while (!wifly.isConnected())  {}
-
     C64Println(F("Incoming Connection"));
-
+    //CheckTelnet();
     TerminalMode();
 }
 // ----------------------------------------------------------
@@ -1061,7 +1069,7 @@ void TerminalMode()
         else {
             while (wifly.available() > 0)
             {
-                DoFlowControl();
+                DoFlowControlModemToC64();
                 C64Serial.write(wifly.read());
             }
         }
@@ -1106,7 +1114,7 @@ void RawTerminalMode()
         while (wifly.available() > 0)
         {
             rnxv_chars++;
-            DoFlowControl();
+            DoFlowControlModemToC64();
 
             C64Serial.write(wifly.read());
             changed = true;
@@ -1134,9 +1142,8 @@ void RawTerminalMode()
     }
 }
 
-inline void DoFlowControl()
+inline void DoFlowControlModemToC64()
 {
-   
     if (Modem_flowControl || BAUD_RATE >= MIN_FLOW_CONTROL_RATE || baudMismatch)
     {
         // Check that C64 is ready to receive
@@ -1147,6 +1154,19 @@ inline void DoFlowControl()
         digitalWriteFast(WIFI_CTS, LOW);
     }
 }
+inline void DoFlowControlC64ToModem()
+{
+    if (Modem_flowControl || BAUD_RATE >= MIN_FLOW_CONTROL_RATE || baudMismatch)
+    {
+        // Check that C64 is ready to receive
+        while (digitalReadFast(WIFI_CTS) == HIGH)   // If not...
+        {
+            digitalWriteFast(C64_RTS, LOW);     // ..stop data from Wi-Fi and wait
+        }
+        digitalWriteFast(C64_RTS, HIGH);
+    }
+}
+
 
 void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host
 {
@@ -1375,7 +1395,8 @@ inline void Modem_PrintERROR()
 
 void Modem_PrintResponse(const char* code, const __FlashStringHelper * msg)
 {
-    C64Println();
+    //C64Println();  // Moved to top of Modem_ProcessCommandBuffer() so that 
+                     // commands such as ati, at&pb? etc also get get an extra \r\n
 
     if (!Modem_QuietMode)
     {
@@ -1420,20 +1441,21 @@ void Modem_Disconnect()
     Modem_isConnected = false;
     Modem_isRinging = false;    
 
-    // TODO - According to http://totse2.net/totse/en/technology/telecommunications/trm.html
-    //		  The BBS should detect <CR><LF>NO CARRIER<CR><LF> as a dropped carrier sequences.
-    //		  DMBBS does not honor this and so I haven't sucessfully tested it, thus it's commented out.
-
-    // LB: Added back in for user feedback
-
     delay(500);
-    sprintf_P(temp, PSTR("\n\rNO CARRIER\n\r"));
-    DisplayBothP(temp);
+    Modem_PrintResponse("3", F("NO CARRIER"));
+    //sprintf_P(temp, PSTR("\r\nNO CARRIER\r\n"));
+    //DisplayBothP(temp);
+    //DisplayP(temp);
+    //C64PrintP(temp);
     //DisplayBoth(F("\n\rNO CARRIER\n\r"));
     //delay(100);
 
     if (wifly.available() == -1)
         wifly.close();
+    else
+        wifly.closeForce();      // Incoming connections need to be force closed.  close()
+                                 // does not work because WiFlyHQ.cpp connected variable is
+                                 // not set for incoming connections.
 
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
@@ -1444,11 +1466,14 @@ void Modem_ProcessCommandBuffer()
 {
     boolean petscii_mode_guess = false;
     byte errors = 0;
-    boolean dialed_out = 0;
+    //boolean dialed_out = 0;
     // Phonebook dial
     char numString[2];
     char address[ADDR_HOST_SIZE];
     int phoneBookNumber;
+    boolean suppressOkError = false;
+
+    C64Println();   // Print an extra \r\n as seen on real modems
     
     // Simple PETSCII/ASCII detection
    
@@ -1609,8 +1634,10 @@ void Modem_ProcessCommandBuffer()
         int localport = atoi(&Modem_CommandBuffer[8]);
         if (localport >= 0 && localport <= 65535)
         {
-              setLocalPort(localport);
-              Modem_PrintOK();
+            if (setLocalPort(localport))
+                while(1);            
+            Modem_PrintOK();
+            WiFlyLocalPort = localport;
         }
         else
             Modem_PrintERROR();
@@ -1672,7 +1699,8 @@ void Modem_ProcessCommandBuffer()
                 break;
 
                 case 'A':
-                Modem_Answer();               
+                Modem_Answer();
+                suppressOkError = true;
                 break;
 
                 case 'E':
@@ -1695,13 +1723,13 @@ void Modem_ProcessCommandBuffer()
                     errors++;
                 }
                 break;
-                
+
                 case 'H':
                 if (Modem_CommandBuffer[i+1] == '0')
                   Modem_CommandBuffer[i++]; 
-                Modem_Disconnect();
+                    Modem_Disconnect();
                 break;
-
+                
                 case 'Q':
                 switch(Modem_CommandBuffer[i++])
                 {
@@ -1875,7 +1903,7 @@ void Modem_ProcessCommandBuffer()
                     case 'P':
                     removeSpaces(&Modem_CommandBuffer[i+1]);
                     Modem_Dialout(&Modem_CommandBuffer[i+1]);
-                    dialed_out = 1;
+                    suppressOkError = 1;
                     i = COMMAND_BUFFER_SIZE-3;    // Make sure we don't try to process any more...
                     break;
 
@@ -1893,7 +1921,7 @@ void Modem_ProcessCommandBuffer()
                         strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
                         removeSpaces(address);
                         Modem_Dialout(address);
-                        dialed_out = 1;                        
+                        suppressOkError = 1;                        
                     }
                     else
                         errors++;
@@ -1902,7 +1930,7 @@ void Modem_ProcessCommandBuffer()
                     default:
                     removeSpaces(&Modem_CommandBuffer[i]);
                     Modem_Dialout(&Modem_CommandBuffer[i]);
-                    dialed_out = 1;
+                    suppressOkError = 1;
                     i = COMMAND_BUFFER_SIZE-3;    // Make sure we don't try to process any more...
                     break;
                 }
@@ -1992,7 +2020,7 @@ void Modem_ProcessCommandBuffer()
             Modem_S0_AutoAnswer = atoi(temp);
         }*/
 
-        if (!dialed_out) {    // Should add error checking to calls to Modem_Dialout(), Connect() etc.
+        if (!suppressOkError) {    // Should add error checking to calls to Modem_Dialout(), Connect() etc.
             if (errors)   
                 Modem_PrintERROR();
             else
@@ -2001,7 +2029,8 @@ void Modem_ProcessCommandBuffer()
     }
     else
     {
-        Modem_PrintERROR();
+        if (!suppressOkError)
+            Modem_PrintERROR();
     }
 
     //strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);   // can't be here, already switched to uppercase
@@ -2020,8 +2049,8 @@ void Modem_Ring()
     {
         Modem_PrintResponse("2", F("RING"));
 
-        if (Modem_DCDFollowsRemoteCarrier)
-            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+        //if (Modem_DCDFollowsRemoteCarrier)
+        //    digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
 
         digitalWriteFast(C64_RI, HIGH);
         delay(250);
@@ -2039,6 +2068,8 @@ void Modem_Connected()
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
 
+    //CheckTelnet();
+     
     Modem_isConnected = true;
     Modem_isCommandMode = false;
     Modem_isRinging = false;
@@ -2128,8 +2159,9 @@ void Modem_ProcessData()
             if (Modem_EchoOn && isValid)
             {
                 if (!Modem_flowControl) 
-                delay(100 / (BAUD_RATE / 2400));     // Slow down command mode to prevent garbage if flow control
-                // is disabled.  Doesn't work at 9600 but flow control should be on at 9600 baud anyways.  TODO:  Fix
+                  delay(100 / (BAUD_RATE / 2400));     // Slow down command mode to prevent garbage if flow control
+                                                       // is disabled.  Doesn't work at 9600 but flow control should 
+                                                       // be on at 9600 baud anyways.  TODO:  Fix
                 C64Serial.write(inbound);
             }
 
@@ -2196,6 +2228,7 @@ void Modem_ProcessData()
                     Modem_PrintOK();
                 }
 
+                DoFlowControlC64ToModem();
                 int result = wifly.write(inbound);
             }
         }
@@ -2243,13 +2276,14 @@ void Modem_Loop()
             {
                 while (wifly.available() > 0)
                 {
+                    DoFlowControlModemToC64();
                     C64Serial.write(wifly.read());
                     // TODO:  Review..  Flow control?
                 }
             }
         }
     }
-    else
+    else  // !wiflyIsConnected
     {
         // Check for a dropped remote connection while ringing
         if (Modem_isRinging)
@@ -2547,10 +2581,11 @@ void removeSpaces(char *temp)
 
 boolean setLocalPort(int localport)
 {
-    if(wifly.getPort() != localport)
+    if(WiFlyLocalPort != localport)
     {
         wifly.setPort(localport);
         wifly.save();
+        WiFlyLocalPort = localport;
         //wifly.reboot();
         //delay(5000);
         
@@ -2565,6 +2600,8 @@ boolean setLocalPort(int localport)
             return false;
         }
     }
+    else
+        return false;
 }
 
 int Modem_ToggleCarrier(boolean isHigh)
