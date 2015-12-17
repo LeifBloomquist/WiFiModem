@@ -6,7 +6,7 @@
 
 /* TODO
  *  set ip tcp-mode 0x10 to disable remote configuration
- *  CheckTelnet() for inbound
+ *  Confirm CheckTelnet() for inbound is working
  *  ATH1 handling
  *  +++ guard time for inboun
  *  
@@ -14,13 +14,16 @@
  *  
  */
 
+#define MICROVIEW        // define to include MicroView display library and features
 
 //#define DEBUG
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-#define HAYES
+//#define HAYES
+#ifdef MICROVIEW
 #include <MicroView.h>
+#endif
 #include <elapsedMillis.h>
 #include <SoftwareSerial.h>
 #include <WiFlyHQ.h>
@@ -30,7 +33,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.07b3"
+#define VERSION "0.07b4"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -141,10 +144,11 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 int main(void)
 {
     init();
+#ifdef MICROVIEW    
     uView.begin(); // begin of MicroView
     uView.setFontType(0);
     uView.clear(ALL); // erase hardware memory inside the OLED controller
-
+#endif // MICROVIEW
     pinModeFast(C64_DCD, OUTPUT);
     Modem_DCDFollowsRemoteCarrier = EEPROM.read(ADDR_MODEM_DCD);
 
@@ -620,19 +624,23 @@ void PhoneBook()
 
 void Display(String message)
 {
+#ifdef MICROVIEW
     uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
     uView.setCursor(0, 0);
     uView.println(message);
     uView.display();
+#endif
 }
 
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
 void DisplayP(const char *message)
 {
+#ifdef MICROVIEW
     uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
     uView.setCursor(0, 0);
     uView.println(message);
     uView.display();
+#endif
 }
 
 void DisplayBoth(String message)
@@ -825,6 +833,7 @@ void ShowInfo(boolean powerup)
     }
 #endif
 
+#ifdef MICROVIEW    
     if (powerup)
     {
         char temp[50];
@@ -845,6 +854,7 @@ void ShowInfo(boolean powerup)
         Display(temp);
         delay(1000);
     }
+#endif  // MICROVIEW    
 }
 
 #ifndef HAYES
@@ -1425,9 +1435,11 @@ void Modem_PrintResponse(const char* code, const __FlashStringHelper * msg)
     }
 
     // Always show verbose version on OLED, underneath command
+#ifdef MICROVIEW
     uView.println();
     uView.println(msg);
     uView.display();
+#endif
 }
 
 void Modem_ResetCommandBuffer()
@@ -1684,8 +1696,8 @@ void Modem_ProcessCommandBuffer()
         }
 
         // To add static entries, update STATIC_PB_ENTRIES and add entries below increased x: ADDR_HOST_ENTRIES - x
-        updateEEPROMPhoneBook(ADDR_HOSTS + (ADDR_HOST_ENTRIES - 1 * ADDR_HOST_SIZE), F("WWW.COMMODORESERVER.COM:1541"));   // last entry
-        updateEEPROMPhoneBook(ADDR_HOSTS + (ADDR_HOST_ENTRIES - 2 * ADDR_HOST_SIZE), F("WWW.JAMMINGSIGNAL.COM:23"));       // second last entry
+        updateEEPROMPhoneBook(ADDR_HOSTS + ((ADDR_HOST_ENTRIES - 1) * ADDR_HOST_SIZE), F("WWW.COMMODORESERVER.COM:1541"));   // last entry
+        updateEEPROMPhoneBook(ADDR_HOSTS + ((ADDR_HOST_ENTRIES - 2) * ADDR_HOST_SIZE), F("WWW.JAMMINGSIGNAL.COM:23"));       // second last entry
                 
         updateEEPROMByte(ADDR_HOST_AUTO, 0);
         Modem_PrintOK();
