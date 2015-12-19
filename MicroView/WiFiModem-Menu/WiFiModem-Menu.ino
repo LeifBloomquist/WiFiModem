@@ -20,7 +20,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-#define HAYES
+//#define HAYES
 #ifdef MICROVIEW
 #include <MicroView.h>
 #endif
@@ -33,7 +33,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.07b5"
+#define VERSION "0.07"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
