@@ -1,3 +1,46 @@
+Version 0.07 - WiFiModem-Menu-006.hex / WiFiModem-Hayes-006.hex
+---------------------------------------------------------------
+
+New:
+-Add support for DCD always on / follow remote carrier to menu and Hayes (at&c0/1)
+-Microview wordwrap fixed
+-Fix for answering calls at > 2400 baud
+-Incoming connections now negotiate telnet parameters to prevent junk from being displayed during initial connection
+-Incoming connections now support bi-directional flow control.
+
+Menu:
+
+-Phone book added.
+-Autostart replaced with option to auto-connect using a phone book entry.
+
+Hayes:
+-Added blocking of non-*scii in AT mode.  This will prevent CLR HOME from clearing your screen, cursor keys causing issues etc.
+-AT commands will now always output in ASCII which matches how real modem works.
+-at&pbclear will clear all entries and add two defaults to position 8 and 9 (bbs.jammingsignal.com and www.commodoreserver.com).
+-Added support for dialing phone book entries with atdt#x and atdp#x (eg: atdt#1, atdp#1 or atd#1)
+-at&pb1 now generates an error.  Use at&pb1= to clear the entry.
+
+
+Version 0.06 - WiFiModem-Menu-006.hex / WiFiModem-Hayes-006.hex
+---------------------------------------------------------------
+
+-SSID join code updated to report back on a failed join instead of a failed SSID setting
+-Changing the incoming port only reboots if it has changed. If > 2400 baud, user must reboot both the Microview and the WiFi. There are currently issues answering at > 2400 baud.
+-Fix for occasional MAC address display error at boot
+
+Menu only:
+
+-Flow control can be enabled/disabled in Configuration menu and is saved in EEPROM.
+
+Hayes only:
+
+-New at command parsing allows multiple settings on one line including dialing. Example: ate0&k1dtbbs.jammingsignal.com:23 or ate0&k1dt#1
+-All variables saved to EEPROM using at&w: e, q, v, &k and s0
+-ati now shows modem init string stored in EEPROM
+-Quiet mode now working (Q1)
+-Allow for spaces in host name when dialing (eg: ATDT bbs.jammingsignal.com)
+
+
 Version 0.05 - WiFiModem-Menu-005.hex / WiFiModem-Hayes-005.hex
 ---------------------------------------------------------------
 
