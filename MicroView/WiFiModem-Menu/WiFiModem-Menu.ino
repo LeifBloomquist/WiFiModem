@@ -20,7 +20,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-//#define HAYES
+#define HAYES
 #ifdef MICROVIEW
 #include <MicroView.h>
 #endif
@@ -33,7 +33,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.07b4"
+#define VERSION "0.07b5"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -1697,7 +1697,7 @@ void Modem_ProcessCommandBuffer()
 
         // To add static entries, update STATIC_PB_ENTRIES and add entries below increased x: ADDR_HOST_ENTRIES - x
         updateEEPROMPhoneBook(ADDR_HOSTS + ((ADDR_HOST_ENTRIES - 1) * ADDR_HOST_SIZE), F("WWW.COMMODORESERVER.COM:1541"));   // last entry
-        updateEEPROMPhoneBook(ADDR_HOSTS + ((ADDR_HOST_ENTRIES - 2) * ADDR_HOST_SIZE), F("WWW.JAMMINGSIGNAL.COM:23"));       // second last entry
+        updateEEPROMPhoneBook(ADDR_HOSTS + ((ADDR_HOST_ENTRIES - 2) * ADDR_HOST_SIZE), F("BBS.JAMMINGSIGNAL.COM:23"));       // second last entry
                 
         updateEEPROMByte(ADDR_HOST_AUTO, 0);
         Modem_PrintOK();
@@ -1709,7 +1709,7 @@ void Modem_ProcessCommandBuffer()
         numString[1] = '\0';
         
         int phoneBookNumber = atoi(numString);
-        if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+        if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES && Modem_CommandBuffer[6] == '=')
         {
             updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), Modem_CommandBuffer + 7);
             Modem_PrintOK();
@@ -1948,24 +1948,45 @@ void Modem_ProcessCommandBuffer()
                 // Dialing should come last..
                 // TODO:  Need to allow for spaces after D, DT, DP.  Currently fails.
                 case 'D':
-                switch(Modem_CommandBuffer[i])
+                switch(Modem_CommandBuffer[i++])
                 {
                     case 'T':
                     case 'P':
-                    removeSpaces(&Modem_CommandBuffer[i+1]);
-                    Modem_Dialout(&Modem_CommandBuffer[i+1]);
-                    suppressOkError = 1;
-                    i = COMMAND_BUFFER_SIZE-3;    // Make sure we don't try to process any more...
-                    break;
 
+                    switch(Modem_CommandBuffer[i++])
+                    {
+                        case '#':
+                        // Phonebook dial
+                        numString[0] = Modem_CommandBuffer[i];
+                        numString[1] = '\0';
+            
+                        phoneBookNumber = atoi(numString);
+                        if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES)
+                        {
+                            strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
+                            removeSpaces(address);
+                            Modem_Dialout(address);
+                            suppressOkError = 1;                        
+                        }
+                        else
+                            errors++;
+                        break;                     
+
+                        default:
+                        i--;
+                        removeSpaces(&Modem_CommandBuffer[i]);
+                        Modem_Dialout(&Modem_CommandBuffer[i]);
+                        suppressOkError = 1;
+                        i = COMMAND_BUFFER_SIZE-3;    // Make sure we don't try to process any more...
+                        break;
+                    }
+                    break;
+                    
                     case '#':
                     // Phonebook dial
-                    //char numString[2];
-                    numString[0] = Modem_CommandBuffer[i+1];
+                    numString[0] = Modem_CommandBuffer[i];
                     numString[1] = '\0';
-                    //char address[ADDR_HOST_SIZE];
         
-                    //int phoneBookNumber = atoi(numString);
                     phoneBookNumber = atoi(numString);
                     if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES)
                     {
@@ -1979,6 +2000,7 @@ void Modem_ProcessCommandBuffer()
                     break;
 
                     default:
+                    i--;        // ATD
                     removeSpaces(&Modem_CommandBuffer[i]);
                     Modem_Dialout(&Modem_CommandBuffer[i]);
                     suppressOkError = 1;
