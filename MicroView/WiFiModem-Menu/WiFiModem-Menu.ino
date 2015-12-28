@@ -33,7 +33,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.07"
+#define VERSION "0.08"
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -828,8 +828,10 @@ void ShowInfo(boolean powerup)
 #ifdef HAYES
     if (!powerup) {
         char at_settings[20];
-        sprintf_P(at_settings, PSTR("ATE%dV%dQ%d&C%d&K%dS0=%d"),Modem_EchoOn,Modem_VerboseResponses,Modem_QuietMode,Modem_DCDFollowsRemoteCarrier,Modem_flowControl,Modem_S0_AutoAnswer);
-        C64Print(F("Init string: "));    C64Println(at_settings);
+        sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),Modem_EchoOn,Modem_QuietMode,Modem_VerboseResponses,Modem_DCDFollowsRemoteCarrier,Modem_flowControl,Modem_S0_AutoAnswer);
+        C64Print(F("Current init:"));    C64Println(at_settings);
+        sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
+        C64Print(F("Saved init:  "));    C64Println(at_settings);
     }
 #endif
 
@@ -955,6 +957,15 @@ int getPort(void)
 
 void Connect(String host, int port, boolean raw)
 {
+    if (host == "5551212") {
+      host = "qlink.lyonlabs.org";
+      port = 5190;
+    }
+    if (host == "5551213") {
+      host = "q-link.net";
+      port = 5190;
+    }
+      
     char temp[50];
     sprintf_P(temp, PSTR("\r\nConnecting to %s"), host.c_str());
 #ifdef HAYES
@@ -985,8 +996,8 @@ void Connect(String host, int port, boolean raw)
 #else
         DisplayBothP(temp);
 #endif
-        if (Modem_DCDFollowsRemoteCarrier)
-            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+//        if (Modem_DCDFollowsRemoteCarrier)
+//            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
     }
     else
     {
@@ -996,8 +1007,8 @@ void Connect(String host, int port, boolean raw)
 #else
         DisplayBoth(F("Connect Failed!"));
 #endif
-        if (Modem_DCDFollowsRemoteCarrier)
-            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
+//        if (Modem_DCDFollowsRemoteCarrier)
+//            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
         return;
     }
 
@@ -1012,10 +1023,14 @@ void Connect(String host, int port, boolean raw)
     itoa(freeRam(), temp3, 10);
     DisplayP(temp3);
     delay (2000);*/
-    
+
 #ifdef HAYES
     Modem_Connected();
+#else
+    if (Modem_DCDFollowsRemoteCarrier)
+        digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
 #endif
+
     TerminalMode();
 }
 
@@ -1030,8 +1045,7 @@ void TerminalMode()
     
     while (wifly.available() != -1) // -1 means closed
     {
-        //if (1) {   // Assumes host is slower than WiFly
-        if (baudMismatch) {   // Assumes host is slower than WiFly
+        if (baudMismatch) {   // If host is slower than WiFly we need to buffer.  Only used for 1200 baud.
             while (wifly.available() > 0)
             {
                 digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
@@ -1044,9 +1058,6 @@ void TerminalMode()
     
             // Dump the buffer to the C64 before clearing WIFI_CTS
             for(int i=0; i<buffer_index; i++) {
-                // Always do flow control if baudMismatch
-                // Check that C64 is ready to receive
-            //while (digitalReadFast(C64_RTS) == LOW);   // If not...  C64 RTS and CTS are inverted.
                 C64Serial.write(buffer[i]);
 
                 while (C64Serial.available() > 0)
@@ -1155,7 +1166,7 @@ void RawTerminalMode()
 
 inline void DoFlowControlModemToC64()
 {
-    if (Modem_flowControl || BAUD_RATE >= MIN_FLOW_CONTROL_RATE || baudMismatch)
+    if (Modem_flowControl || BAUD_RATE >= MIN_FLOW_CONTROL_RATE)
     {
         // Check that C64 is ready to receive
         while (digitalReadFast(C64_RTS) == LOW)   // If not...  C64 RTS and CTS are inverted.
@@ -1167,7 +1178,7 @@ inline void DoFlowControlModemToC64()
 }
 inline void DoFlowControlC64ToModem()
 {
-    if (Modem_flowControl || BAUD_RATE >= MIN_FLOW_CONTROL_RATE || baudMismatch)
+    if (Modem_flowControl || BAUD_RATE >= MIN_FLOW_CONTROL_RATE)
     {
         // Check that C64 is ready to receive
         while (digitalReadFast(WIFI_CTS) == HIGH)   // If not...
@@ -1348,15 +1359,8 @@ void HayesEmulationMode()
 
     Modem_LoadDefaults();
 
-    // Load saved settings
-    Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
-    Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
-    Modem_VerboseResponses = EEPROM.read(ADDR_MODEM_VERBOSE);
-    Modem_QuietMode = EEPROM.read(ADDR_MODEM_QUIET);
-    Modem_S0_AutoAnswer = EEPROM.read(ADDR_MODEM_S0_AUTOANS);
-    Modem_S2_EscapeCharacter = EEPROM.read(ADDR_MODEM_S2_ESCAPE);
-    Modem_isDcdInverted = EEPROM.read(ADDR_MODEM_DCD_INVERTED);
-    Modem_DCDFollowsRemoteCarrier = EEPROM.read(ADDR_MODEM_DCD);
+    Modem_LoadSavedSettings();
+
     Modem_ResetCommandBuffer();
 
     C64Println();
@@ -1462,6 +1466,41 @@ void Modem_LoadDefaults(void)
     Modem_isDcdInverted = false;
     Modem_flowControl = false;
     Modem_DCDFollowsRemoteCarrier = false;
+
+    Modem_DCD_Set();
+}
+
+void Modem_LoadSavedSettings(void)
+{
+    // Load saved settings
+    Modem_EchoOn = EEPROM.read(ADDR_MODEM_ECHO);
+    Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
+    Modem_VerboseResponses = EEPROM.read(ADDR_MODEM_VERBOSE);
+    Modem_QuietMode = EEPROM.read(ADDR_MODEM_QUIET);
+    Modem_S0_AutoAnswer = EEPROM.read(ADDR_MODEM_S0_AUTOANS);
+    Modem_S2_EscapeCharacter = EEPROM.read(ADDR_MODEM_S2_ESCAPE);
+    Modem_isDcdInverted = EEPROM.read(ADDR_MODEM_DCD_INVERTED);
+    Modem_DCDFollowsRemoteCarrier = EEPROM.read(ADDR_MODEM_DCD);
+
+    Modem_DCD_Set();
+
+}
+
+// Only used for at&f and atz commands
+void Modem_DCD_Set(void)
+{
+    if(Modem_DCDFollowsRemoteCarrier == false)
+    {
+        digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+    }
+    else {
+        if (Modem_isConnected) {
+          digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+        }
+        else {
+          digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
+        }
+    }    
 }
 
 void Modem_Disconnect()
@@ -1728,7 +1767,7 @@ void Modem_ProcessCommandBuffer()
             switch(Modem_CommandBuffer[i++]) 
             {
                 case 'Z':
-                Modem_LoadDefaults();
+                Modem_LoadSavedSettings();
                 break;
                 
                 case 'I':
@@ -2229,8 +2268,8 @@ void Modem_ProcessData()
 
             if (Modem_EchoOn)
             {
-                if (!Modem_flowControl) 
-                  delay(100 / (BAUD_RATE / 2400));     // Slow down command mode to prevent garbage if flow control
+                if (!Modem_flowControl)
+                  delay(100 / ((BAUD_RATE >= 2400 ? BAUD_RATE : 2400) / 2400));     // Slow down command mode to prevent garbage if flow control
                                                        // is disabled.  Doesn't work at 9600 but flow control should 
                                                        // be on at 9600 baud anyways.  TODO:  Fix
                 C64Serial.write(inbound);

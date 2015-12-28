@@ -1,4 +1,19 @@
-Version 0.07 - WiFiModem-Menu-006.hex / WiFiModem-Hayes-006.hex
+Version 0.08 - WiFiModem-Menu-008.hex / WiFiModem-Hayes-008.hex
+---------------------------------------------------------------
+
+New:
+-Q-Link now works at 1200 baud.  See the Commodore WiFi Modem Users Guide.pdf document for instructions.
+-Dialing 555-1212 will connect to lyonlabs.org:5190
+-Dialing 555-1213 will connect to q-link.org:5190
+-No longer forces flow control at 1200 baud
+
+Hayes:
+-fixed bug with 1200 baud commands not working when flow control is off
+-atz now loads the saved settings instead of factory defaults.  Use at&f for factory defaults.
+-ati now shows both current and saved settings.
+
+
+Version 0.07 - WiFiModem-Menu-007.hex / WiFiModem-Hayes-007.hex
 ---------------------------------------------------------------
 
 New:
