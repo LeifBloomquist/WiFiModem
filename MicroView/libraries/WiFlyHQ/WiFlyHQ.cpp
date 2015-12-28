@@ -2412,6 +2412,11 @@ boolean WiFly::isAssociated()
     return (status.assoc == 1);
 }
 
+/**
+ * finishCommand() added as the RN-XV 171 4.41 firmware does NOT
+ * exit command mode after setting the instant baud rate.
+ * 12/12/15 - Alex Burger
+ */
 boolean WiFly::setBaud(uint32_t baud)
 {
     char buf[16];
@@ -2422,8 +2427,10 @@ boolean WiFly::setBaud(uint32_t baud)
     startCommand();
     if (setopt(PSTR("set u i"), buf)) {
 	//serial->begin(baud);		// Sketch will need to do this
+	finishCommand();		// Alex Burger
 	return true;
     }
+    finishCommand();			// Alex Burger
     return false;
 }
 
@@ -2680,6 +2687,87 @@ boolean WiFly::open(const char *addr, uint16_t port, boolean block)
     finishCommand();
     return false;
 }
+
+boolean WiFly::openSilent(const char *addr, uint16_t port)
+{
+    char buf[20];
+    char ch;
+
+    startCommand();
+
+    /* Already connected? Close the connection first */
+    if (connected) {
+	close();
+    }
+
+    simple_utoa(port, 10, buf, sizeof(buf));
+#ifdef DEBUG2
+    debug.print(F("open ")); debug.print(addr); debug.print(' '); debug.println(buf);
+#endif
+    send_P(PSTR("open "));
+    send(addr);
+    send(" ");
+    send(buf);
+    send_P(PSTR("\r"));
+
+    if (!getPrompt()) {
+#ifdef DEBUG2
+	debug.println(F("Failed to get prompt"));
+	debug.println(F("WiFly has crashed and will reboot..."));
+#endif
+	while (1); /* wait for the reboot */
+	return false;
+    }
+
+    /* Expect "*OPEN*" or "Connect FAILED" */
+
+    while (readTimeout(&ch,10000)) {
+	switch (ch) {
+	case '*':
+	    if (match_P(PSTR("OPEN*"))) {
+		DPRINT(F("Connected\n\r"));
+		//connected = true;
+		/* successful connection exits command mode */
+		inCommandMode = false;
+		return true;
+	    } else {
+		finishCommand();
+		return false;
+	    }
+	    break;
+	case 'C': {
+		buf[0] = ch;
+		gets(&buf[1], sizeof(buf)-1);
+#ifdef DEBUG2
+		debug.print(F("Failed to connect: ")); debug.println(buf);
+#endif
+		finishCommand();
+		return false;
+	    }
+
+	default:
+#ifdef DEBUG2
+	    if (debugOn) {
+		debug.print(F("Unexpected char: "));
+		debug.print(ch,HEX);
+		if (isprint(ch)) {
+		    debug.print(' ');
+		    debug.print(ch);
+		}
+		debug.println();
+	    }
+#endif
+	    break;
+	}
+    }
+
+#ifdef DEBUG2
+    debug.println(F("<timeout>"));
+#endif
+    finishCommand();
+    return false;
+}
+
 
 /**
  * Open a TCP connection.
@@ -3029,6 +3117,32 @@ boolean WiFly::close()
     return !connected;
 }
 
+/**
+ * Close the TCP connection even if it thinks it's not open.
+ * If connecting remotely, the connected variable is not set
+ * so calling close() does not close the connection..
+ * 12/12/15 - Alex Burger
+ */
+boolean WiFly::closeForce()
+{
+    flushRx();
+
+    startCommand();
+    send_P(PSTR("close\r"));
+
+    if (match_P(PSTR("*CLOS*"))) {
+	finishCommand();
+#ifdef DEBUG2
+	debug.println(F("close: got *CLOS*"));
+#endif
+	connected = false;
+	return true;
+    } else {
+	finishCommand();
+	debug.println(F("close: failed, no *CLOS*"));
+	return false;
+    }
+}
 
 WFDebug::WFDebug()
 {
