@@ -21,6 +21,7 @@
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
 //#define HAYES
+
 #ifdef MICROVIEW
 #include <MicroView.h>
 #endif
@@ -33,15 +34,13 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.08"
-
-// Configuration 0v3: Wifi Hardware, C64 Software.
+#define VERSION "0.09b1"
 
 unsigned int BAUD_RATE=2400;
-//#define BAUD_RATE 2400
 unsigned int WiFly_BAUD_RATE=2400;
-//#define WiFly_BAUD_RATE 2400
 #define MIN_FLOW_CONTROL_RATE 4800  // If BAUD rate is this speed or higher, RTS/CTS flow control is enabled.
+
+// Configuration 0v3: Wifi Hardware, C64 Software.
 
 // Wifi
 // RxD is D0  (Hardware Serial)
@@ -752,7 +751,7 @@ void SetPETSCIIMode(boolean mode)
 
 boolean IsBackSpace(char c)
 {
-    if ((c == 8) || (c == 20))
+    if ((c == 8) || (c == 20) || (c == 127))
     {
         return true;
     }
@@ -786,20 +785,30 @@ String GetInput_Raw()
 
     while (true)
     {
-        key = ReadByte(C64Serial); // Read in one character
-        temp[i] = key;
-        C64Serial.write(key); // Echo key press back to the user.
+        key = ReadByte(C64Serial);  // Read in one character
 
-       // if ((key == '\b') && (i > 0)) i -= 2; // Handles back space.
-
-        if (IsBackSpace(key) && (i > 0)) i -= 2; // Handles back space.        
-
-        if (((int)key == 13) || (i == max_length - 1))   // The 13 represents enter key.
+        if (!IsBackSpace(key))  // Handle character, if not backspace
         {
-            temp[i] = 0; // Terminate the string with 0.
-            return String(temp);
+            temp[i] = key;
+            C64Serial.write(key);    // Echo key press back to the user
+
+            if (((int)key == 13) || (i >= (max_length - 1)))   // The 13 represents enter key.
+            {
+                temp[i] = 0; // Terminate the string with 0.
+                return String(temp);
+            }
+            i++;
         }
-        i++;
+        else     // Backspace
+        {
+            if (i > 0)
+            {
+                C64Serial.write(key);
+                i--;
+            }
+        }
+
+        // Make sure didn't go negative
         if (i < 0) i = 0;
     }
 }
