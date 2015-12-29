@@ -116,7 +116,7 @@
 #define WIFLY_WLAN_JOIN_ANY		0x02	/* Ignore SSID and join strongest network using passkey. */
 #define WIFLY_WLAN_JOIN_ADHOC		0x04	/* Create an Adhoc network using SSID, Channel, IP and NetMask */
 
-#define WIFLY_DEFAULT_TIMEOUT		7000	/* WAS 500 milliseconds */
+#define WIFLY_DEFAULT_TIMEOUT		500	/* 500 milliseconds */
 
 #define WIFLY_MODE_WPA			0	
 #define WIFLY_MODE_WEP			1
@@ -262,8 +262,10 @@ public:
     void disableHostRestore();
 
     boolean open(const char *addr, uint16_t port=80, boolean block=true);
+    boolean openSilent(const char *addr, uint16_t port);
     boolean open(IPAddress addr, uint16_t port=80, boolean block=true);
     boolean close();
+    boolean closeForce();
     boolean openComplete();
     boolean isConnected();
     boolean isInCommandMode();
