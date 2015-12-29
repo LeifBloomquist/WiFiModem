@@ -25,15 +25,15 @@
 
 // Add header of the fonts here.  Remove as many as possible to conserve FLASH memory.
 #include <font5x7.h>
-#include <font8x16.h>
-#include <fontlargenumber.h>
-#include <7segment.h>
-#include <space01.h>
-#include <space02.h>
-#include <space03.h>
+//#include <font8x16.h>
+//#include <fontlargenumber.h>
+//#include <7segment.h>
+//#include <space01.h>
+//#include <space02.h>
+//#include <space03.h>
 
 // Change the total fonts included
-#define TOTALFONTS		7
+#define TOTALFONTS		1
 #define recvLEN			100
 char serInStr[recvLEN];		// TODO - need to fix a value so that this will not take up too much memory.
 uint8_t serCmd[recvLEN];
@@ -41,12 +41,12 @@ uint8_t serCmd[recvLEN];
 // Add the font name as declared in the header file.  Remove as many as possible to get conserve FLASH memory.
 const unsigned char *MicroView::fontsPointer[]={
 	font5x7
-	,font8x16
-	,sevensegment
-	,fontlargenumber
-	,space01
-	,space02
-	,space03
+//	,font8x16
+//	,sevensegment
+//	,fontlargenumber
+//	,space01
+//	,space02
+//	,space03
 };
 
 // TODO - Need to be able to let user add custom fonts from outside of the library
