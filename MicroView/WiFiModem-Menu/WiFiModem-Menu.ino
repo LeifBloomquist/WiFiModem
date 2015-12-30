@@ -95,6 +95,7 @@ char autoConnectHost = 0;
 
 #define ADDR_HOST_AUTO          99     // Autostart host number
 #define ADDR_HOSTS              100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
+#define STATIC_PB_ENTRIES       2
 //#define ADDR_xxxxx            300
 
 // Hayes variables
@@ -532,7 +533,8 @@ void PhoneBook()
 
         C64Println();
         DisplayPhoneBook();
-        C64Print(F("\r\nSelect: #, m to modify, a to set\r\n""auto-start, 0 to go back: "));
+        //C64Print(F("\r\nSelect: #, m to modify, a to set\r\n""auto-start, 0 to go back: "));
+        C64Print(F("\r\nSelect: #, m to modify, c to clear all\r\na to set auto-start, 0 to go back: "));
 
         char addressChar = ReadByte(C64Serial);
         C64Serial.println((char)addressChar);
@@ -563,6 +565,20 @@ void PhoneBook()
                     else
                         updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), "");
                     
+                }
+            }
+        }
+        else if (addressChar == 'c' || addressChar == 'C')
+        {
+            C64Print(F("\r\nAre you sure (y/n)? "));
+
+            char addressChar = ReadByte(C64Serial);
+
+            if (addressChar == 'y' || addressChar == 'Y')
+            {              
+                for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
+                {
+                    updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
                 }
             }
         }
@@ -1735,9 +1751,16 @@ void Modem_ProcessCommandBuffer()
         C64Println();
         Modem_PrintOK();
     }
+    else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR2")) != NULL)
+    {
+        for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
+        {
+            updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
+        }
+        Modem_PrintOK();
+    }
     else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR")) != NULL)
     {
-#define STATIC_PB_ENTRIES  2
         for (int i = 0; i < ADDR_HOST_ENTRIES - STATIC_PB_ENTRIES; i++)
         {
             updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
