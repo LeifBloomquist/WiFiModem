@@ -8,7 +8,7 @@
  *  set ip tcp-mode 0x10 to disable remote configuration
  *  Confirm CheckTelnet() for inbound is working
  *  ATH1 handling
- *  +++ guard time for inboun
+ *  +++ guard time for inbound
  *  
  *  
  *  
@@ -34,7 +34,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.09b1"
+#define VERSION "0.09b2"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -294,13 +294,6 @@ while (1)
                  "\r\n"
                  "Select: "));
 
-    /*C64Println(F("1. Telnet to host or BBS"));
-    C64Println(F("2. Phone Book"));
-    C64Println(F("3. Wait for incoming connection"));
-    C64Println(F("4. Configuration"));
-    C64Println();
-    C64Print(F("Select: "));*/
-
     int option = ReadByte(C64Serial);
     C64Serial.println((char)option);
 
@@ -356,11 +349,7 @@ void Configuration()
                      "\r\n"
                      "1. Display Current Configuration\r\n"
                      "2. Change SSID\r\n"));
-//        C64Println();
-//        C64Println(F("Configuration Menu"));
-//        C64Println();
-//        C64Println(F("1. Display Current Configuration"));
-//        C64Println(F("2. Change SSID"));
+
         sprintf_P(temp,PSTR("3. %s flow control"),Modem_flowControl == true ? "Disable" : "Enable");        
         C64Println(temp);      
         sprintf_P(temp,PSTR("4. %s DCD always on"),Modem_DCDFollowsRemoteCarrier == false ? "Disable" : "Enable");        
@@ -368,10 +357,6 @@ void Configuration()
         C64Print(F("5. Direct Terminal Mode (Debug)\r\n"
                      "6. Return to Main Menu\r\n"
                      "\r\nSelect: "));
-//        C64Println(F("5. Direct Terminal Mode (Debug)"));
-//        C64Println(F("6. Return to Main Menu"));
-//        C64Println();
-//        C64Print(F("Select: "));
 
         int option = ReadByte(C64Serial);
         C64Serial.println((char)option);
@@ -435,7 +420,7 @@ void ChangeSSID()
 
     while (true)
     {
-        C64Println(F("\r\n"
+        C64Print(F("\r\n"
                      "Change SSID\r\n"
                      "\r\n"
                      "1. WEP\r\n"
@@ -443,15 +428,6 @@ void ChangeSSID()
                      "3. Return to Configuration Menu\r\n"
                      "\r\n"
                      "Select: "));
-
-/*        C64Println();
-        C64Println(F("Change SSID"));
-        C64Println();
-        C64Println(F("1. WEP"));
-        C64Println(F("2. WPA / WPA2"));
-        C64Println(F("3. Return to Configuration Menu"));
-        C64Println();
-        C64Print(F("Select: "));*/
 
         int option = ReadByte(C64Serial);
         C64Serial.println((char)option);
@@ -507,21 +483,20 @@ void ChangeSSID()
         C64Println();
         C64Print(F("SSID:"));
         input = GetInput();
-        wifly.setSSID(input.c_str());   // Note inverted, not sure why this has to be
+        wifly.setSSID(input.c_str());   // Note return value appears to be inverted, not sure why
         wifly.save();
         wifly.leave();
-            if (wifly.join(20000))    // 20 second timeout
-            {
-                //C64Println();
-                C64Println(F("\r\nSSID Successfully changed"));
-                return;
-            }
-            else
-            {
-                //C64Println();
-                C64Println(F("\r\nError joining network"));
-                continue;
-            }
+
+        if (wifly.join(20000))    // 20 second timeout
+        {
+            C64Println(F("\r\nSSID Successfully changed"));
+            return;
+        }
+        else
+        {
+            C64Println(F("\r\nError joining network"));
+            continue;
+        }
     }
 }
 void PhoneBook()
@@ -906,17 +881,27 @@ void Incoming()
             while(1);            
     }
 
-    WiFlyLocalPort = localport;
-
-    C64Print(F("\r\nWaiting for connection on port "));
-    C64Serial.println(WiFlyLocalPort);
+    WiFlyLocalPort = localport;  
 
     /* Force close any connections that were made before we started listening, as 
      * the WiFly is always listening and accepting connections if a local port 
      * is defined.  */
     wifly.closeForce();
-    // Idle here until connected
-    while (!wifly.isConnected())  {}
+
+    C64Print(F("\r\nWaiting for connection on port "));
+    C64Serial.println(WiFlyLocalPort);
+
+    // Idle here until connected or cancelled
+    while (!wifly.isConnected())  
+    {
+        if (C64Serial.available() > 0)  // Key hit
+        {
+            C64Serial.read();  // Eat Character
+            C64Println(F("Cancelled"));
+            return;
+        }
+    }
+
     C64Println(F("Incoming Connection"));
     CheckTelnet();
     TerminalMode();
@@ -1234,35 +1219,35 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
     {
         inpint = PeekByte(wifly, 5000);       // peek at next character, timeout after 5 second
 
-            if (inpint != IAC)
-            {
-                return;   // Let Terminal mode handle character
-            }
+        if (inpint != IAC)
+        {
+            return;   // Let Terminal mode handle character
+        }
 
-        inpint = ReadByte(wifly);    // Eat IAC character
-        verbint = ReadByte(wifly);   // receive negotiation verb character
-        if (verbint == -1) continue;                //          if  negotiation verb character is nothing break the routine(should never happen)
+        inpint = ReadByte(wifly);       // Eat IAC character
+        verbint = ReadByte(wifly);      // receive negotiation verb character
+        if (verbint == -1) continue;    // if negotiation verb character is nothing break the routine (should never happen)
 
-            switch (verbint) {                             //   evaluate negotiation verb character
-            case IAC:                                    //          if    negotiation verb character is 255 (restart negotiation)
-                    continue;                                     //break the routine
+            switch (verbint) {                           // evaluate negotiation verb character
+            case IAC:                                    // if negotiation verb character is 255 (restart negotiation)
+                    continue;                            // break the routine
 
-            case 251:                                    //          if     negotiation verb character is 251 (will)or
-            case 252:                                    //          if       negotiation verb character is 252 (wont)or
-            case 253:                                    //          if      negotiation verb character is 253 (do) or
-            case 254:                                    //          if      negotiation verb character is 254 (dont)
-                    optint = ReadByte(wifly);                  //               receive negotiation option character
-                    if (optint == -1) continue;                   //            if             negotiation option character is nothing break the routine(should       never happen)
+            case 251:                                    // if negotiation verb character is 251 (will)or
+            case 252:                                    // if negotiation verb character is 252 (wont)or
+            case 253:                                    // if negotiation verb character is 253 (do) or
+            case 254:                                    // if negotiation verb character is 254 (dont)
+                    optint = ReadByte(wifly);            // receive negotiation option character
+                    if (optint == -1) continue;          // if negotiation option character is nothing break the routine (should never happen)
 
                     switch (optint) {
 
-                    case 3:                                   // if negotiation                        option character is 3 (suppress - go - ahead)
+                    case 3:                                   // if negotiation option character is 3 (suppress - go - ahead)
                             SendTelnetDoWill(verbint, optint);
                         break;
 
-                    default:                                     //        if                        negotiation option character is none of the above(all others)
+                    default:                                     // if negotiation option character is none of the above(all others)
                             SendTelnetDontWont(verbint, optint);
-                        break;                                     //  break the routine
+                        break;                                   //  break the routine
                 }
         }
     }
@@ -1603,7 +1588,7 @@ void Modem_ProcessCommandBuffer()
 
     Display(Modem_CommandBuffer);
     
-    // TODO: Handle concatenated command strings.  For now, process a aingle command.
+    // TODO: Handle concatenated command strings.  For now, process a single command.
 
     /*if (strcmp(Modem_CommandBuffer, ("ATZ")) == 0)
     {
@@ -2460,28 +2445,6 @@ void Modem_Loop()
 
 #endif // HAYES
 
-// -------------------------------------------------------------------------------------------------------------
-// QuantumLink Reloaded! Support
-/*
-void QuantumLinkReloaded()
-{
-
-   // Open("qlink.lyonlabs.org", 5190);
-
-}*/
-/*
-hostname = ;
-port = 5190;
-
-//Prepare to change the Arduino baud rate.
-Serial.flush();
-delay(2);
-Serial.end();
-
-//Change the arduino's baud rate.
-Serial.begin(115200);
-*/
-
 /*
 void ConfigureBaud()
 {
@@ -2589,7 +2552,6 @@ int freeRam ()
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
 }
 
-// EOF!
 long detRate(int recpin)  // function to return valid received baud rate
 // Note that the serial monitor has no 600 baud option and 300 baud
 // doesn't seem to work with version 22 hardware serial library
@@ -2732,11 +2694,11 @@ boolean setLocalPort(int localport)
         //delay(5000);
         
         if (WiFly_BAUD_RATE != 2400) {
-            C64Println(F("Reboot MicroView & WiFi to set new port."));
+            C64Println(F("\n\rReboot MicroView & WiFi to set new port."));
             return true;
         }
         else {
-            C64Println(F("Rebooting WiFi..."));
+            C64Println(F("\n\rRebooting WiFi..."));
             wifly.reboot();
             delay(5000);
             return false;
@@ -2792,15 +2754,9 @@ void Modem_Dialout(char* host)
             hostname = String(host);
             port = atoi(index + 1);
         }
-    /*if (hostname == F("5551212"))
-    {
-        QuantumLinkReloaded();
-        return;
-    }*/
 
     lastHost = hostname;
     lastPort = port;
 
     Connect(hostname, port, false);
 }
-
