@@ -75,7 +75,7 @@
 #include <IPAddress.h>
 
 #if (ARDUINO >= 103)
-  typedef const char PROGMEM prog_char;
+typedef const char PROGMEM prog_char;
 #endif
 
 /* IP Protocol bits */
@@ -227,6 +227,8 @@ public:
     boolean setIOFunc(const uint8_t func);
     
     boolean sleep(uint16_t seconds = 0);
+    boolean isSleeping();
+    void wake();
     
     boolean time();
     char *getTime(char *buf, int size);
@@ -360,6 +362,8 @@ public:
     boolean hide();
 
     boolean inCommandMode;
+    boolean sleeping;
+    uint32_t lastInstantBaud;
     int  exitCommand;
     boolean dhcp;
     bool restoreHost;

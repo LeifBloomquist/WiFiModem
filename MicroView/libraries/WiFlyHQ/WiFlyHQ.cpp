@@ -329,6 +329,7 @@ IPAddress WiFly::atoip(char *buf)
 WiFly::WiFly()
 {
     inCommandMode = false;
+    sleeping = false;
     exitCommand = 0;
     connected = false;
     connecting = false;
@@ -1266,7 +1267,9 @@ int WiFly::gets(char *buf, int size, uint16_t timeout)
 
 /* Get the WiFly ready to receive a command. */
 boolean WiFly::startCommand()
-{
+{	
+    wake();
+
     if (!inCommandMode) {
 	if (!enterCommandMode()) {
 	    return false;
@@ -1500,7 +1503,7 @@ uint32_t WiFly::getBaud()
  * using the wake timer (supplied in seconds).
  */
 boolean WiFly::sleep(uint16_t seconds)
-{
+{    
     if (seconds != NULL) {
         if(!setopt(PSTR("set sys wake"), seconds)) {
             return false;
@@ -1511,8 +1514,36 @@ boolean WiFly::sleep(uint16_t seconds)
     }
     send_P(PSTR("sleep\r"));
     inCommandMode = false;
+    sleeping = true;
     return true;
 }
+
+// When it wakes up, it's in DATA mode so there is no output as printlvl is 0.
+// Go into command mode to see the output and look for GW=
+void WiFly::wake()
+{
+    if(sleeping)
+    {
+        sleeping = false;
+        send_P(PSTR("\r"));
+        enterCommandMode();
+        if (!match_P(PSTR("GW="),10000)) {		// Give it 10 seconds..
+	       setBaud(lastInstantBaud);
+           finishCommand();
+           return;
+        }
+        delay(1000);
+        setBaud(lastInstantBaud);
+        finishCommand();
+        init();
+    }
+}
+
+boolean WiFly::isSleeping()
+{
+    return sleeping;
+}
+
 
 /**
  * This command sets the real-time clock by synchronizing
@@ -2428,6 +2459,7 @@ boolean WiFly::setBaud(uint32_t baud)
     if (setopt(PSTR("set u i"), buf)) {
 	//serial->begin(baud);		// Sketch will need to do this
 	finishCommand();		// Alex Burger
+	lastInstantBaud = baud;
 	return true;
     }
     finishCommand();			// Alex Burger

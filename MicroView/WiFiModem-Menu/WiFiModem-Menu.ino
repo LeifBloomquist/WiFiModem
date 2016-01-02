@@ -20,7 +20,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-//#define HAYES
+#define HAYES
 
 #ifdef MICROVIEW
 #include <MicroView.h>
@@ -148,6 +148,8 @@ int main(void)
     uView.begin(); // begin of MicroView
     uView.setFontType(0);
     uView.clear(ALL); // erase hardware memory inside the OLED controller
+#else // MICROVIEW
+    delay(3000);
 #endif // MICROVIEW
     pinModeFast(C64_DCD, OUTPUT);
     Modem_DCDFollowsRemoteCarrier = EEPROM.read(ADDR_MODEM_DCD);
@@ -250,8 +252,7 @@ int main(void)
         RawTerminalMode();
     }
 
-    // Enable DNS caching, TCP retry, TCP_NODELAY, TCP connection status
-    wifly.setIpFlags(16 && 4 && 2 && 1);
+    configureWiFly();
 
         if (BAUD_RATE != 2400) {
         delay(1000);
@@ -812,7 +813,7 @@ void ShowInfo(boolean powerup)
     char mac[20];
     char ip[20];
     char ssid[20];
-        
+       
     wifly.getMAC(mac, 20);    // Sometimes the first time contains garbage..
     wifly.getMAC(mac, 20);
     wifly.getIP(ip, 20);
@@ -828,9 +829,9 @@ void ShowInfo(boolean powerup)
 #ifdef HAYES
     if (!powerup) {
         char at_settings[20];
-        sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),Modem_EchoOn,Modem_QuietMode,Modem_VerboseResponses,Modem_DCDFollowsRemoteCarrier,Modem_flowControl,Modem_S0_AutoAnswer);
+        sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%dS2=%d"),Modem_EchoOn,Modem_QuietMode,Modem_VerboseResponses,Modem_DCDFollowsRemoteCarrier,Modem_flowControl,Modem_S0_AutoAnswer,Modem_S2_EscapeCharacter);
         C64Print(F("Current init:"));    C64Println(at_settings);
-        sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
+        sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%dS2=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS),EEPROM.read(ADDR_MODEM_S2_ESCAPE));
         C64Print(F("Saved init:  "));    C64Println(at_settings);
     }
 #endif
@@ -983,8 +984,6 @@ void Connect(String host, int port, boolean raw)
 #else
     DisplayBothP(temp);
 #endif
-
-    wifly.setIpProtocol(WIFLY_PROTOCOL_TCP);
 
     /* Do a DNS lookup to get the IP address.  Lookup has a 5 second timeout. */
     char ip[16];
@@ -1552,6 +1551,8 @@ void Modem_ProcessCommandBuffer()
     char address[ADDR_HOST_SIZE];
     int phoneBookNumber;
     boolean suppressOkError = false;
+    char atCommandFirstChars[] = "AEHIQVZ&RSD\r\n";
+    char tempAsciiValue[3];
 
     C64Println();   // Print an extra \r\n as seen on real modems
     
@@ -1609,7 +1610,8 @@ void Modem_ProcessCommandBuffer()
     {
         Modem_Answer();    
     }
-    else*/ if (strcmp(Modem_CommandBuffer, ("ATD")) == 0 || strcmp(Modem_CommandBuffer, ("ATO")) == 0)
+    else*/ 
+    if (strcmp(Modem_CommandBuffer, ("ATD")) == 0 || strcmp(Modem_CommandBuffer, ("ATO")) == 0)
     {
         if (Modem_isConnected)
         {
@@ -1736,7 +1738,7 @@ void Modem_ProcessCommandBuffer()
         C64Println();
         Modem_PrintOK();
     }
-    else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR2")) != NULL)
+    else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR")) != NULL)
     {
         for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
         {
@@ -1744,7 +1746,7 @@ void Modem_ProcessCommandBuffer()
         }
         Modem_PrintOK();
     }
-    else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR")) != NULL)
+/*    else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR")) != NULL)
     {
         for (int i = 0; i < ADDR_HOST_ENTRIES - STATIC_PB_ENTRIES; i++)
         {
@@ -1757,7 +1759,7 @@ void Modem_ProcessCommandBuffer()
                 
         updateEEPROMByte(ADDR_HOST_AUTO, 0);
         Modem_PrintOK();
-    }
+    }*/
     else if (strncmp(Modem_CommandBuffer, ("AT&PB"), 5) == 0)
     {
         char numString[2];
@@ -1785,6 +1787,8 @@ void Modem_ProcessCommandBuffer()
             {
                 case 'Z':
                 Modem_LoadSavedSettings();
+                if(wifly.isSleeping())
+                    wake();
                 break;
                 
                 case 'I':
@@ -1807,11 +1811,6 @@ void Modem_ProcessCommandBuffer()
                     Modem_EchoOn = true;
                     break;
 
-                    case '?':
-                    C64Serial.print(Modem_EchoOn);
-                    //C64PrintIntln(EEPROM.read(ADDR_MODEM_ECHO));
-                    break;
-
                     default:
                     errors++;
                 }
@@ -1822,12 +1821,16 @@ void Modem_ProcessCommandBuffer()
                 {
                     case '0':
                     suppressOkError = true;
+                    if(wifly.isSleeping())
+                        wake();
                     Modem_Disconnect();
                     break;
 
-                    /*case '1':
-                    // Future
-                    break;*/
+                    case '1':
+                    if(!wifly.isSleeping())
+                        wifly.sleep();
+                    setBaudWiFi2(2400);
+                    break;
 
                     default:
                     i--;                        // User entered ATH
@@ -1846,10 +1849,6 @@ void Modem_ProcessCommandBuffer()
 
                     case '1':
                     Modem_QuietMode = true;
-                    break;
-
-                    case '?':
-                    C64Serial.print(Modem_QuietMode);
                     break;
 
                     default:
@@ -1874,10 +1873,6 @@ void Modem_ProcessCommandBuffer()
                             Modem_S0_AutoAnswer = 1;
                             break;
 
-                            case '?':
-                            C64Serial.print(Modem_S0_AutoAnswer);
-                            break;
-
                             default:
                             errors++;
                             }
@@ -1885,10 +1880,33 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
+                    /*case '2':
+                    switch(Modem_CommandBuffer[i++])
+                    {
+                        case '=':
+                        char numString[3] = "";
+
+                        // Find index of last character for this setting.  Expects 1-3 numbers (ats2=43, ats2=126 etc)
+                        int j = i;
+                        for(int p=0; (p < strlen(atCommandFirstChars)) && (j <= i+2); p++)
+                        {
+                            if(strchr(atCommandFirstChars, Modem_CommandBuffer[j]))
+                              break;
+                            j++;                           
+                        }
+
+                        strncpy(numString, Modem_CommandBuffer + i, j-i);
+                        numString[3] = '\0';
+
+                        Modem_S2_EscapeCharacter = atoi(numString);
+
+                        i=j;
+                        break;    
+                    }
+                    break;*/
                 }
                 break;
 
-                
                 case 'V':
                 switch(Modem_CommandBuffer[i++])
                 {
@@ -1898,10 +1916,6 @@ void Modem_ProcessCommandBuffer()
 
                     case '1':
                     Modem_VerboseResponses = true;
-                    break;
-
-                    case '?':
-                    C64Serial.print(Modem_VerboseResponses);
                     break;
 
                     default:
@@ -1944,10 +1958,6 @@ void Modem_ProcessCommandBuffer()
                         }
                         break;
                         
-                        case '?':
-                        C64Serial.print(Modem_DCDFollowsRemoteCarrier);
-                        break;
-
                         default:
                         errors++;
                     }
@@ -1955,6 +1965,9 @@ void Modem_ProcessCommandBuffer()
 
                     case 'F':
                     Modem_LoadDefaults();
+                    if(wifly.isSleeping())
+                        wake();
+
                     break;
                     
                     case 'K':
@@ -1968,10 +1981,6 @@ void Modem_ProcessCommandBuffer()
                         Modem_flowControl = true;
                         break;
                         
-                        case '?':
-                        C64Serial.print(Modem_flowControl);
-                        break;
-
                         default:
                         errors++;
                     }
@@ -2545,6 +2554,13 @@ void setBaudWiFi(unsigned int newBaudRate) {
   WifiSerial.begin(newBaudRate);
 }
 
+void setBaudWiFi2(unsigned int newBaudRate) {
+  WifiSerial.flush();
+  delay(2);
+  WifiSerial.end();
+  WifiSerial.begin(newBaudRate);
+}
+
 int freeRam () 
 {
   extern int __heap_start, *__brkval; 
@@ -2701,6 +2717,7 @@ boolean setLocalPort(int localport)
             C64Println(F("\n\rRebooting WiFi..."));
             wifly.reboot();
             delay(5000);
+            configureWiFly();
             return false;
         }
     }
@@ -2760,3 +2777,19 @@ void Modem_Dialout(char* host)
 
     Connect(hostname, port, false);
 }
+
+void configureWiFly() {
+    // Enable DNS caching, TCP retry, TCP_NODELAY, TCP connection status
+    wifly.setIpFlags(16 | 4 | 2 | 1);           // 23  // Does this require a save?
+    wifly.setIpProtocol(WIFLY_PROTOCOL_TCP);    // Does this require a save?  If so, remove and set once on WiFly and document.
+
+}
+
+void wake()
+{
+    wifly.wake();
+    //configureWiFly();
+    //setBaudWiFi(WiFly_BAUD_RATE);
+    //isSleeping = false;
+}
+
