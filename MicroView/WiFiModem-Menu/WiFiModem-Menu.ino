@@ -34,7 +34,7 @@
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.09b2"
+#define VERSION "0.09b3"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -113,8 +113,6 @@ char    Modem_S2_EscapeCharacter = '+';
 #define COMMAND_BUFFER_SIZE  81
 char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
 char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
-
-int Modem_EscapeCount = 0;
 
 // Misc Values
 #define TIMEDOUT  -1
@@ -1038,9 +1036,8 @@ void Connect(String host, int port, boolean raw)
 #else
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
-#endif
-
     TerminalMode();
+#endif
 }
 
 void TerminalMode()
@@ -1192,7 +1189,7 @@ inline void DoFlowControlC64ToModem()
         // Check that C64 is ready to receive
         while (digitalReadFast(WIFI_RTS) == HIGH)   // If not...
         {
-            digitalWriteFast(C64_CTS, LOW);     // ..stop data from Wi-Fi and wait
+            digitalWriteFast(C64_CTS, LOW);     // ..stop data from C64 and wait
         }
         digitalWriteFast(C64_CTS, HIGH);
     }
@@ -1363,9 +1360,7 @@ void HayesEmulationMode()
 
     if (Modem_DCDFollowsRemoteCarrier == true)
       digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
-
-    Modem_EscapeCount = 0;
-
+   
     Modem_LoadDefaults();
 
     Modem_LoadSavedSettings();
@@ -2344,28 +2339,43 @@ void Modem_ProcessData()
         {
             if (Modem_isConnected)
             {
-                char inbound = C64Serial.read();
+                char C64input = C64Serial.read();
 
-                if (inbound == Modem_S2_EscapeCharacter)
+                if ((millis() - ESCAPE_GUARD_TIME) > escapeTimer)
                 {
-                    Modem_EscapeCount++;
+
+                    if (C64input == '+' && lastC64input != '+')
+                    {
+                        escapeCount = 1;
+                        lastC64input = C64input;
+                    }
+                    else if (C64input == '+' && lastC64input == '+')
+                    {
+                        escapeCount++;
+                        lastC64input = C64input;
+                    }
+                    else
+                    {
+                        escapeCount = 0;
+                        escapeTimer = millis();   // Last time non + data was read
+                    }
                 }
                 else
                 {
-                    Modem_EscapeCount = 0;
-                    // TODO, guard time!
+                    escapeTimer = millis();   // Last time data was read
                 }
 
-                if (Modem_EscapeCount == 3)
-                {
-                    Modem_EscapeCount = 0;
-                    Modem_isCommandMode = true;   // TODO, guard time!
-
+                if (escapeCount == 3) {
+                    Display("Escape!");
+                    escapeReceived = true;
+                    escapeCount = 0;
+                    escapeTimer = 0;
+                    Modem_isCommandMode = true;
+                    C64Println();
                     Modem_PrintOK();
                 }
-
                 DoFlowControlC64ToModem();
-                int result = wifly.write(inbound);
+                int result = wifly.write(C64input);
             }
         }
     }
@@ -2388,6 +2398,11 @@ void Modem_Answer()
 // Main processing loop for the virtual modem.  Needs refactoring!
 void Modem_Loop()
 {
+    int data;
+    char buffer[100];
+    int buffer_index = 0;
+    // int max_buffer_size_reached = 0;
+
     boolean wiflyIsConnected = wifly.isConnected();
 
     if (wiflyIsConnected) {
@@ -2406,15 +2421,61 @@ void Modem_Loop()
             // Echo an error back to remote terminal if in command mode.
             if (Modem_isCommandMode && wifly.available() > 0)
             {
-                wifly.println(F("error: remote modem is in command mode."));
+                // If we print this, remote end gets flooded with this message 
+                // if we go to command mode on the C64 and remote side sends something..
+                //wifly.println(F("error: remote modem is in command mode."));
             }
             else
             {
-                while (wifly.available() > 0)
-                {
-                    DoFlowControlModemToC64();
-                    C64Serial.write(wifly.read());
-                    // TODO:  Review..  Flow control?
+                if (baudMismatch) {   // If host is slower than WiFly we need to buffer.  Only used for 1200 baud.
+                    while (wifly.available() > 0)
+                    {
+                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+
+                        data = wifly.read();
+                        buffer[buffer_index++] = data;
+                        if (buffer_index > 99)
+                            buffer_index = 99;
+                    }
+
+                    // Dump the buffer to the C64 before clearing WIFI_CTS
+                    for (int i = 0; i<buffer_index; i++) {
+                        C64Serial.write(buffer[i]);
+
+                        /* NOTE:  For Menu firmware, we also process C64Serial.available here.
+                                  May not be needed as 1200 baud upload and download test passed,
+                                  but when trying to use joe editor in Linux at 1200 baud, it loses
+                                  a lot of characters when typing.  Same for Menu firmware. */
+                    }
+
+                    
+                    // Only used for displaying max buffer size on Microview for testing
+                    if (max_buffer_size_reached < buffer_index)
+                    max_buffer_size_reached = buffer_index;
+                    char message[20];
+                    sprintf_P(message, PSTR("Buf: %d"), max_buffer_size_reached);
+                    Display(message);
+
+                    // Show largest buffer size on Microview
+                    // 4800/9600 = 3
+                    // 4800/19200 = 5
+                    // 1200/19200 = doesn't work
+                    // 4800/38400 = 12
+                    // 2400/38400 = 40 - bbs.jammingsignal.com:23 (1200 baud) worked.
+                    // 2400/38400 = 40 - cib.dyndns.com:6400 (19200 baud) worked.
+                    // 2400/38400 = 40 - Linux telnet did not work with Novaterm.  Default flow tolerance = 200.  Set to 100 and sometimes connected.
+                    // 9600/38400 = 11           
+
+                    buffer_index = 0;
+
+                    digitalWriteFast(WIFI_CTS, LOW);
+                }
+                else {
+                    while (wifly.available() > 0)
+                    {
+                        DoFlowControlModemToC64();
+                        C64Serial.write(wifly.read());
+                    }
                 }
             }
         }
@@ -2435,16 +2496,6 @@ void Modem_Loop()
             return;
         }
     }
-
-    // Flow control, revisit
-    //else if (!modem.getIsConnected() && modem.getIsCommandMode())
-    //{
-        //digitalWrite(DCE_RTS, LOW);
-    //}
-    //else if(digitalRead(DTE_CTS) == HIGH)
-    //{
-    //	digitalWrite(DTE_RTS, LOW);
-    //}
 
     // Handle all other data arriving on the serial port of the virtual modem.
     Modem_ProcessData();
@@ -2680,7 +2731,8 @@ void processC64Inbound()
         escapeCount = 0;
         escapeTimer = 0;
     }
-      
+    
+    DoFlowControlC64ToModem();
     wifly.write(C64input);
     //wifly.write(C64Serial.read());
 }
@@ -2793,3 +2845,4 @@ void wake()
     //isSleeping = false;
 }
 
+// #EOF - Leave this at the very end...
