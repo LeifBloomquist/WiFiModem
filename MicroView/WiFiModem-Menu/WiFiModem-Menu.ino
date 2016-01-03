@@ -2450,11 +2450,11 @@ void Modem_Loop()
 
                     
                     // Only used for displaying max buffer size on Microview for testing
-                    if (max_buffer_size_reached < buffer_index)
+                    /*if (max_buffer_size_reached < buffer_index)
                     max_buffer_size_reached = buffer_index;
                     char message[20];
                     sprintf_P(message, PSTR("Buf: %d"), max_buffer_size_reached);
-                    Display(message);
+                    Display(message);*/
 
                     // Show largest buffer size on Microview
                     // 4800/9600 = 3
