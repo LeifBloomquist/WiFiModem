@@ -1190,11 +1190,11 @@ inline void DoFlowControlC64ToModem()
     if (Modem_flowControl || BAUD_RATE >= MIN_FLOW_CONTROL_RATE)
     {
         // Check that C64 is ready to receive
-        while (digitalReadFast(WIFI_CTS) == HIGH)   // If not...
+        while (digitalReadFast(WIFI_RTS) == HIGH)   // If not...
         {
-            digitalWriteFast(C64_RTS, LOW);     // ..stop data from Wi-Fi and wait
+            digitalWriteFast(C64_CTS, LOW);     // ..stop data from Wi-Fi and wait
         }
-        digitalWriteFast(C64_RTS, HIGH);
+        digitalWriteFast(C64_CTS, HIGH);
     }
 }
 
