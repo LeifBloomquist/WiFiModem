@@ -7,8 +7,6 @@
 /* TODO
  *  set ip tcp-mode 0x10 to disable remote configuration
  *  Confirm CheckTelnet() for inbound is working
- *  ATH1 handling
- *  +++ guard time for inbound
  *  
  *  
  *  
@@ -20,7 +18,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-#define HAYES
+//#define HAYES
 
 #ifdef MICROVIEW
 #include <MicroView.h>
@@ -108,11 +106,11 @@ boolean Modem_VerboseResponses = true;
 boolean Modem_QuietMode = false;
 boolean Modem_S0_AutoAnswer = false;
 char    Modem_S2_EscapeCharacter = '+';
-#endif    // HAYES
 
 #define COMMAND_BUFFER_SIZE  81
 char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
 char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
+#endif    // HAYES
 
 // Misc Values
 #define TIMEDOUT  -1
@@ -132,10 +130,6 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 #define AUTO_QLINK    3
 #define AUTO_CUSTOM   100   // TODO
 
-//#ifndef HAYES
-//byte autostart_mode = EEPROM.read(ADDR_AUTOSTART);    // 0-255 only
-//#endif
-
 // ----------------------------------------------------------
 // Arduino Setup Function
 
@@ -147,7 +141,7 @@ int main(void)
     uView.setFontType(0);
     uView.clear(ALL); // erase hardware memory inside the OLED controller
 #else // MICROVIEW
-    delay(3000);
+    delay(3000);   // Five WiFly time to boot
 #endif // MICROVIEW
     pinModeFast(C64_DCD, OUTPUT);
     Modem_DCDFollowsRemoteCarrier = EEPROM.read(ADDR_MODEM_DCD);
@@ -195,8 +189,6 @@ int main(void)
         updateEEPROMByte(ADDR_BAUD_HI,b);
     }
 
-    //setBaud(BAUD_RATE, false, true);
-
     //
     // Baud rate detection end
     //
@@ -220,16 +212,6 @@ int main(void)
     digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
 
     //WifiSerial.begin(WiFly_BAUD_RATE);
-
-  /*
-    BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
-    if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 9600 && BAUD_RATE != 38400)
-        BAUD_RATE = 2400;
-  */
-
-    //C64Serial.begin(BAUD_RATE);
-
-    //delay(1000);
     
     C64Serial.println();
     DisplayBoth(F("Wi-Fi Init..."));
@@ -252,13 +234,13 @@ int main(void)
 
     configureWiFly();
 
-        if (BAUD_RATE != 2400) {
-        delay(1000);
-        if(BAUD_RATE == 1200)
-            setBaudWiFi(2400);
-        else
-            setBaudWiFi(BAUD_RATE);
-        }
+    if (BAUD_RATE != 2400) {
+    delay(1000);
+    if(BAUD_RATE == 1200)
+        setBaudWiFi(2400);
+    else
+        setBaudWiFi(BAUD_RATE);
+    }
     baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
   
     wifly.close();
@@ -281,59 +263,57 @@ int main(void)
     C64Println();
     ShowInfo(true);
 
-while (1)
-{
-    Display(F("READY."));
-
-    ShowPETSCIIMode();
-    C64Print(F("1. Telnet to host or BBS\r\n"
-                 "2. Phone Book\r\n"
-                 "3. Wait for incoming connection\r\n"
-                 "4. Configuration\r\n"
-                 "\r\n"
-                 "Select: "));
-
-    int option = ReadByte(C64Serial);
-    C64Serial.println((char)option);
-
-    switch (option)
+    while (1)
     {
-    case '1':
-        DoTelnet();
-        break;
+        Display(F("READY."));
 
-    case '2':
-        PhoneBook();
-        break;
+        ShowPETSCIIMode();
+        C64Print(F("1. Telnet to host or BBS\r\n"
+                     "2. Phone Book\r\n"
+                     "3. Wait for incoming connection\r\n"
+                     "4. Configuration\r\n"
+                     "\r\n"
+                     "Select: "));
 
-    case '3':
-        Incoming();
-        break;
+        int option = ReadByte(C64Serial);
+        C64Serial.println((char)option);
+
+        switch (option)
+        {
+        case '1':
+            DoTelnet();
+            break;
+
+        case '2':
+            PhoneBook();
+            break;
+
+        case '3':
+            Incoming();
+            break;
    
-    case '4':
-            Configuration();
-        break;
+        case '4':
+                Configuration();
+            break;
  
-    case '\n':
-    case '\r':
-    case ' ':
-        break;
+        case '\n':
+        case '\r':
+        case ' ':
+            break;
 
-    case 8:
-        SetPETSCIIMode(false);
-        break;
+        case 8:
+            SetPETSCIIMode(false);
+            break;
 
-    case 20:
-        SetPETSCIIMode(true);
-        break;
+        case 20:
+            SetPETSCIIMode(true);
+            break;
 
-    default:
-        C64Println(F("Unknown option, try again"));
-        break;
+        default:
+            C64Println(F("Unknown option, try again"));
+            break;
+        }
     }
-}
-
-
 #endif // HAYES
 }
 
@@ -385,9 +365,6 @@ void Configuration()
             
             updateEEPROMByte(ADDR_MODEM_DCD,Modem_DCDFollowsRemoteCarrier);
             break;
-
-/*      case '4': ConfigureBaud();
-            break;*/
 
         case '5': RawTerminalMode();
             return;
@@ -507,7 +484,6 @@ void PhoneBook()
 
         C64Println();
         DisplayPhoneBook();
-        //C64Print(F("\r\nSelect: #, m to modify, a to set\r\n""auto-start, 0 to go back: "));
         C64Print(F("\r\nSelect: #, m to modify, c to clear all\r\na to set auto-start, 0 to go back: "));
 
         char addressChar = ReadByte(C64Serial);
@@ -569,13 +545,6 @@ void PhoneBook()
             {
                 C64Serial.print(phoneBookNumber);
                 updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);   
-                /*switch (phoneBookNumber) {
-                    case 0:
-                    break;
-
-                    default:
-                    updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);                            
-                }*/
             }
           
         }
@@ -866,7 +835,6 @@ void Incoming()
 {
     int localport = WiFlyLocalPort;
 
-    //C64Println();
     C64Print(F("\r\nIncoming port ("));
     C64Serial.print(localport);
     C64Print(F("): "));
@@ -905,10 +873,9 @@ void Incoming()
     CheckTelnet();
     TerminalMode();
 }
+
 // ----------------------------------------------------------
 // Telnet Handling
-
-
 void DoTelnet()
 {
     int port = lastPort;
@@ -960,8 +927,6 @@ int getPort(void)
         return(lastPort);
     }
 }
-
-
 #endif // HAYES
 
 void Connect(String host, int port, boolean raw)
@@ -1048,7 +1013,6 @@ void TerminalMode()
     int buffer_bytes = 0;
     int max_buffer_size_reached = 0;
 
-    
     while (wifly.available() != -1) // -1 means closed
     {
         if (baudMismatch) {   // If host is slower than WiFly we need to buffer.  Only used for 1200 baud.
@@ -1288,15 +1252,6 @@ int ReadByte(Stream& in)
 
 int PeekByte(Stream& in, unsigned int timeout)
 {
-    /*unsigned long timer;
-    timer = millis();
-
-    while (in.available() == 0)
-    {
-      if (millis() - timeout < timer)
-          return TIMEDOUT;
-    }*/
- 
     elapsedMillis timeElapsed = 0;
 
     while (in.available() == 0)
@@ -1336,8 +1291,6 @@ void HandleAutoStart()
         }
         
         Modem_Dialout(address);
-        //Connect(F("www.commodoreserver.com"), 1541, true);
-        //delay(1000);
     }
 }
 #endif  // HAYES
@@ -1875,7 +1828,7 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                    /*case '2':
+                    case '2':
                     switch(Modem_CommandBuffer[i++])
                     {
                         case '=':
@@ -1898,7 +1851,7 @@ void Modem_ProcessCommandBuffer()
                         i=j;
                         break;    
                     }
-                    break;*/
+                    break;
                 }
                 break;
 
@@ -2505,96 +2458,6 @@ void Modem_Loop()
 
 #endif // HAYES
 
-/*
-void ConfigureBaud()
-{
-  if (BAUD_RATE == 2400)
-  {
-      setBaud(9600,true);
-  }
-  else
-  {
-      setBaud(2400,true);
-  }
-}*/
-
-/*
-void ConfigureBaud()
-{
-    while (true)
-    {
-        C64Println();
-        C64Print(F("Baud Rate Menu (Current: "));
-        C64Serial.print(BAUD_RATE);
-        C64Println(F(")"));
-        C64Println();
-        C64Println(F("1. 1200"));
-        C64Println(F("2. 2400"));
-        C64Println(F("3. 9600"));
-        C64Println(F("4. Return to Main Menu"));
-
-        C64Println();
-        C64Print(F("Select: "));
-
-        int option = ReadByte(C64Serial);
-        C64Serial.println((char)option);
-
-        switch (option)
-        {
-        case '1': setBaud(1200, true);
-            break;
-        case '2': setBaud(2400, true);
-            break;
-        case '3': setBaud(9600, true);
-            break;
-        case '4': return;
-
-        case '\n':
-        case '\r':
-        case ' ':
-            continue;
-
-        default: C64Println(F("Unknown option, try again"));
-            continue;
-        }
-
-        EEPROM.write(ADDR_AUTOSTART, autostart_mode);  // Save
-        C64Println(F("Saved"));
-    }
-}*/
-
-/*
-void setBaud(int newBaudRate, boolean pause, boolean setup) {
-    char temp[20];
-    BAUD_RATE = newBaudRate;
-    if (!setup) {
-        sprintf(temp, "New baud: %d", BAUD_RATE);
-    C64Println(temp);
-    C64Serial.flush();
-    delay(2);
-    C64Serial.end();
-    }
-    C64Serial.begin(BAUD_RATE);
-    C64Serial.setTimeout(1000);
-
-    if(BAUD_RATE == 1200)
-        setBaudWiFi(2400);
-    else
-        setBaudWiFi(BAUD_RATE);
-
-    if (pause)
-        delay(5000);  // Delay 5 seconds so user has time to switch to help prevent junk...
-
-    byte a = newBaudRate/256;
-    byte b = newBaudRate % 256;
-
-    // Let's not waste writes..
-    if (EEPROM.read(ADDR_BAUD_LO) != a)
-        EEPROM.write(ADDR_BAUD_LO, a);
-    if (EEPROM.read(ADDR_BAUD_HI) != b)
-        EEPROM.write(ADDR_BAUD_HI, b);
-}*/
-
 void setBaudWiFi(unsigned int newBaudRate) {
   WiFly_BAUD_RATE = newBaudRate;
   WifiSerial.flush();
@@ -2667,7 +2530,6 @@ void updateEEPROMByte(int address, byte value)
         EEPROM.write(address, value);
 }
 
-//void updateEEPROMPhoneBook(byte address, String host, int port)
 void updateEEPROMPhoneBook(int address, String host)
 {
     int i=0;
@@ -2675,12 +2537,6 @@ void updateEEPROMPhoneBook(int address, String host)
     {
         EEPROM.write(address + i, host.c_str()[i]);
     }
-    
-    /*byte a = BAUD_RATE / 256;
-    byte b = BAUD_RATE % 256;
-
-    updateEEPROMByte(address+i++,a);
-    updateEEPROMByte(address+i,b);*/
 }
 
 String readEEPROMPhoneBook(int address)
@@ -2692,10 +2548,6 @@ String readEEPROMPhoneBook(int address)
         host[i] = EEPROM.read(address + i);
     }
     return host;
-    
-    //lastHost = host;
-
-    //lastPort = (EEPROM.read(address+i++) * 256 + EEPROM.read(address+i));
 }
 
 
@@ -2734,7 +2586,6 @@ void processC64Inbound()
     
     DoFlowControlC64ToModem();
     wifly.write(C64input);
-    //wifly.write(C64Serial.read());
 }
 
 void removeSpaces(char *temp)
@@ -2758,8 +2609,6 @@ boolean setLocalPort(int localport)
         wifly.setPort(localport);
         wifly.save();
         WiFlyLocalPort = localport;
-        //wifly.reboot();
-        //delay(5000);
         
         if (WiFly_BAUD_RATE != 2400) {
             C64Println(F("\n\rReboot MicroView & WiFi to set new port."));
