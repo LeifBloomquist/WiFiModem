@@ -18,7 +18,7 @@
 
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
-#define HAYES     // Also define in WiFlyHQ.cpp!
+//#define HAYES     // Also define in WiFlyHQ.cpp!
 
 #ifdef MICROVIEW
 #include <MicroView.h>
@@ -484,8 +484,8 @@ void PhoneBook()
 
         C64Println();
         DisplayPhoneBook();
-        C64Print(F("\r\nSelect: #, m to modify, a to set\r\n""auto-start, 0 to go back: "));
-        //C64Print(F("\r\nSelect: #, m to modify, c to clear all\r\na to set auto-start, 0 to go back: "));
+        //C64Print(F("\r\nSelect: #, m to modify, a to set\r\n""auto-start, 0 to go back: "));
+        C64Print(F("\r\nSelect: #, m to modify, c to clear all\r\na to set auto-start, 0 to go back: "));
 
         char addressChar = ReadByte(C64Serial);
         C64Serial.println((char)addressChar);
@@ -519,7 +519,7 @@ void PhoneBook()
                 }
             }
         }
-        /*else if (addressChar == 'c' || addressChar == 'C')
+        else if (addressChar == 'c' || addressChar == 'C')
         {
             C64Print(F("\r\nAre you sure (y/n)? "));
 
@@ -532,7 +532,7 @@ void PhoneBook()
                     updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
                 }
             }
-        }*/
+        }
         else if (addressChar == 'a' || addressChar == 'A')
         {
             C64Print(F("\r\nEntry # to set to auto-start?\r\n""(0 to disable): "));
