@@ -242,7 +242,7 @@ public:
     boolean enableDHCP();
     boolean disableDHCP();
     
-    boolean createAdhocNetwork(const char *ssid, uint8_t channel);
+    //boolean createAdhocNetwork(const char *ssid, uint8_t channel);
     boolean join(const char *ssid, uint16_t timeout=20000);
     boolean join(uint16_t timeout=20000);
     boolean join(const char *ssid, const char *password, bool dhcp=true, uint8_t mode=WIFLY_MODE_WPA, uint16_t timeout=20000);
@@ -264,7 +264,6 @@ public:
     void disableHostRestore();
 
     boolean open(const char *addr, uint16_t port=80, boolean block=true);
-    boolean openSilent(const char *addr, uint16_t port);
     boolean open(IPAddress addr, uint16_t port=80, boolean block=true);
     boolean close();
     boolean closeForce();

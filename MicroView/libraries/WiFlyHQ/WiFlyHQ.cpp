@@ -27,7 +27,7 @@
  * @file WiFly RN-XV Library
  */
 
-#define HAYES			// For WiFiModem
+//#define HAYES			// For WiFiModem
 
 #include "WiFlyHQ.h"
 
@@ -734,7 +734,9 @@ void WiFly::send_P(const prog_char *str)
  * Start a capture of all the characters recevied from the WiFly.
  * @param size - the size of the capture buffer. This will be malloced.
  */
+ /*
 void WiFly::dbgBegin(int size)
+// Removed for WiFiModem
 {
     if (dbgBuf != NULL) {
 	free(dbgBuf);
@@ -742,10 +744,11 @@ void WiFly::dbgBegin(int size)
     dbgBuf = (char *)malloc(size);
     dbgInd = 0;
     dbgMax = size;
-}
+}*/
 
 /** Stop debug capture and free buffer */
-void WiFly::dbgEnd()
+/*void WiFly::dbgEnd()
+// Removed for WiFiModem
 {
     if (dbgBuf != NULL) {
 	free(dbgBuf);
@@ -753,10 +756,11 @@ void WiFly::dbgEnd()
     }
     dbgInd = 0;
     dbgMax = 0;
-}
+}*/
 
 /** Do a hex and ASCII dump of the capture buffer, and free the buffer.  */
-void WiFly::dbgDump()
+/*void WiFly::dbgDump()
+// Removed for WiFiModem
 {
     int ind;
 
@@ -780,7 +784,7 @@ void WiFly::dbgDump()
     free(dbgBuf);
     dbgBuf = NULL;
     dbgMax = 0;
-}
+}*/
 
 /** Read the next character from the WiFly serial interface.
  * Waits up to timeout milliseconds to receive the character.
@@ -1000,7 +1004,8 @@ boolean WiFly::match_P(const prog_char *str, uint16_t timeout)
  * @returns the index of the matching string
  * @retval -1 - no match found, timeout reached
  */
-int WiFly::multiMatch_P(uint16_t timeout, uint8_t count, ...)
+/*int WiFly::multiMatch_P(uint16_t timeout, uint8_t count, ...)
+// Removed for WiFiModem
 {
     const prog_char *str[20];
     int ind;
@@ -1017,7 +1022,7 @@ int WiFly::multiMatch_P(uint16_t timeout, uint8_t count, ...)
     va_end(ap);
 
     return multiMatch_P(str, count, timeout);
-}
+}*/
 
 /**
  * Read characters from the WiFly and match them against the set of
@@ -1193,7 +1198,9 @@ boolean WiFly::exitCommandMode()
     }
 }
 
+/*
 int WiFly::getsTerm(char *buf, int size, char term, uint16_t timeout)
+// Removed for WiFiModem
 {
     char ch;
     int ind=0;
@@ -1208,7 +1215,7 @@ int WiFly::getsTerm(char *buf, int size, char term, uint16_t timeout)
 	    return ind;
 	}
 
-	/* Truncate to buffer size */
+	// Truncate to buffer size
 	if ((ind < (size-1)) && buf) {
 	    buf[ind++] = ch;
 	}
@@ -1218,7 +1225,7 @@ int WiFly::getsTerm(char *buf, int size, char term, uint16_t timeout)
 	buf[ind] = 0;
     }
     return 0;
-}
+}*/
 
 /**
  * Read characters into the buffer until a carriage-return and newline is reached.
@@ -1441,7 +1448,8 @@ uint16_t WiFly::getHostPort()
     return 0;
 }
 
-char *WiFly::getNetmask(char *buf, int size)
+/*char *WiFly::getNetmask(char *buf, int size)
+// Removed for WiFiModem
 {
     return getopt(WIFLY_GET_NETMASK, buf, size);
 }
@@ -1455,6 +1463,7 @@ char *WiFly::getDNS(char *buf, int size)
 {
     return getopt(WIFLY_GET_DNS, buf, size);
 }
+*/
 
 char *WiFly::getMAC(char *buf, int size)
 {
@@ -1471,10 +1480,11 @@ uint8_t WiFly::getJoin()
     return getopt(WIFLY_GET_JOIN);
 }
 
-char *WiFly::getDeviceID(char *buf, int size)
+/*char *WiFly::getDeviceID(char *buf, int size)
+// Removed for WiFiModem
 {
     return getopt(WIFLY_GET_DEVICEID, buf, size);
-}
+}*/
 
 uint32_t WiFly::getopt(int opt, uint8_t base)
 {
@@ -1555,7 +1565,8 @@ boolean WiFly::isSleeping()
  * (set time) parameters. This command sends a UDP time
  * server request packet.
  */
-boolean WiFly::time()
+/*boolean WiFly::time()
+// Removed for WiFiModem
 {
     if (!startCommand()) {
         return false;
@@ -1574,6 +1585,7 @@ uint32_t WiFly::getRTC()
 {
     return getopt(WIFLY_GET_RTC);
 }
+*/
 
 /**
  * Do a DNS lookup to find the ip address of the specified hostname 
@@ -1606,7 +1618,8 @@ bool WiFly::getHostByName(const char *hostname, char *buf, int size)
     return false;
 }
 
-uint32_t WiFly::getUptime()
+/*uint32_t WiFly::getUptime()
+// Removed for WiFiModem
 {
     return getopt(WIFLY_GET_UPTIME);
 }
@@ -1619,7 +1632,7 @@ uint8_t WiFly::getTimezone()
 uint8_t WiFly::getUartMode()
 {
     return getopt(WIFLY_GET_UART_MODE, HEX);
-}
+}*/
 
 int8_t WiFly::getDHCPMode()
 {
@@ -1678,7 +1691,8 @@ uint8_t WiFly::getProtocol()
     return prot;
 }
 
-uint16_t WiFly::getFlushTimeout()
+/*uint16_t WiFly::getFlushTimeout()
+// Removed for WiFiModem
 {
     return getopt(WIFLY_GET_FLUSHTIMEOUT);
 }
@@ -1697,6 +1711,7 @@ int8_t WiFly::getRSSI()
 {
     return -(int8_t)getopt(WIFLY_GET_RSSI);
 }
+*/
 
 
 const prog_char res_AOK[] PROGMEM = "AOK\r\n";
@@ -1850,7 +1865,8 @@ boolean WiFly::reboot()
 }
 
 /** Restore factory default settings */
-boolean WiFly::factoryRestore()
+/*boolean WiFly::factoryRestore()
+// Removed for WiFiModem
 {
     bool res = false;
 
@@ -1865,9 +1881,11 @@ boolean WiFly::factoryRestore()
 
     finishCommand();
     return res;
-}
+}*/
 
+/*
 boolean WiFly::setDeviceID(const __FlashStringHelper *buf)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set o d"), NULL, buf);
 }
@@ -1875,7 +1893,7 @@ boolean WiFly::setDeviceID(const __FlashStringHelper *buf)
 boolean WiFly::setDeviceID(const char *buf)
 {
     return setopt(PSTR("set o d"), buf);
-}
+}*/
 
 bool WiFly::setJoin(uint8_t join)
 {
@@ -1889,10 +1907,11 @@ bool WiFly::setJoin(uint8_t join)
  * @retval true address set
  * @retval false failed to set address
  */
-boolean WiFly::setIP(const char *buf)
+/*boolean WiFly::setIP(const char *buf)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set ip address"), buf);
-}
+}*/
 
 /** 
  * Set the WiFly's IP address.
@@ -1901,10 +1920,11 @@ boolean WiFly::setIP(const char *buf)
  * @retval true address set
  * @retval false failed to set address
  */
-boolean WiFly::setIP(const __FlashStringHelper *buf)
+/*boolean WiFly::setIP(const __FlashStringHelper *buf)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set ip address"), NULL, buf);
-}
+}*/
 
 /** Set local port */
 boolean WiFly::setPort(const uint16_t port)
@@ -1946,7 +1966,8 @@ boolean WiFly::setHost(const char *buf, uint16_t port)
     return res;
 }
 
-boolean WiFly::setNetmask(const char *buf)
+/*boolean WiFly::setNetmask(const char *buf)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set ip netmask"), buf);
 }
@@ -1964,7 +1985,7 @@ boolean WiFly::setGateway(const char *buf)
 boolean WiFly::setDNS(const char *buf)
 {
     return setopt(PSTR("set dns address"), buf);
-}
+}*/
 
 boolean WiFly::setDHCP(const uint8_t mode)
 {
@@ -1995,29 +2016,32 @@ boolean WiFly::setIpFlags(const uint8_t flags)
     return setopt(PSTR("set ip flags"), flags, HEX);
 }
 
-/** Set NTP server IP address */
-boolean WiFly::setTimeAddress(const char *buf)
+
+// Set NTP server IP address
+/*boolean WiFly::setTimeAddress(const char *buf)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set time address"), buf);
 }
 
-/** Set NTP server port */
+// Set NTP server port
 boolean WiFly::setTimePort(const uint16_t port)
 {
     return setopt(PSTR("set time port"), port);
 }
 
-/** Set timezone for calculating local time based on NTP time. */
+// Set timezone for calculating local time based on NTP time.
 boolean WiFly::setTimezone(const uint8_t zone)
 {
     return setopt(PSTR("set time zone"), zone);
 }
 
-/** Set the NTP update period */
+// Set the NTP update period
 boolean WiFly::setTimeEnable(const uint16_t period)
 {
     return setopt(PSTR("set time enable"), period);
 }
+*/
 
 boolean WiFly::setUartMode(const uint8_t mode)
 {
@@ -2030,17 +2054,19 @@ boolean WiFly::setUartMode(const uint8_t mode)
  *                Set this to zero to disable broadcasts.
  * @return true if sucessful, else false.
  */
-boolean WiFly::setBroadcastInterval(const uint8_t seconds)
+/*boolean WiFly::setBroadcastInterval(const uint8_t seconds)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set broadcast interval"), seconds, HEX);
-}
+}*/
 
 /**
  * Enable the UDP auto-pair functionality.
  * The WiFly will automatically set the Host IP and port
  * to match the sender of the last UDP packet.
  */
-boolean WiFly::enableUdpAutoPair()
+/*boolean WiFly::enableUdpAutoPair()
+// Removed for WiFiModem
 {
    udpAutoPair = true;
    setHostIP(F("0.0.0.0"));
@@ -2056,7 +2082,7 @@ boolean WiFly::disableUdpAutoPair()
    setIpFlags(getIpFlags() & ~WIFLY_FLAG_UDP_AUTO_PAIR);
 
    return true;
-}
+}*/
 
 /**
  * Set comms flush timeout. When using data trigger mode,
@@ -2068,10 +2094,11 @@ boolean WiFly::disableUdpAutoPair()
  * @note the flush timeout change does not actually work
  *       unless the config is saved and the wifly is rebooted.
  */
-boolean WiFly::setFlushTimeout(const uint16_t timeout)
+/*boolean WiFly::setFlushTimeout(const uint16_t timeout)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set comm time"), timeout);
-}
+}*/
 
 /** Set the comms flush character. 0 disables the feature.
  * A packet will be sent whenever this character is sent
@@ -2079,30 +2106,34 @@ boolean WiFly::setFlushTimeout(const uint16_t timeout)
  * @param flushChar send a packet when this character is sent.
  *        Set to 0 to disable character based flush.
  */
-boolean WiFly::setFlushChar(const char flushChar)
+/*boolean WiFly::setFlushChar(const char flushChar)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set comm match"), (uint8_t)flushChar, HEX);
-}
+}*/
 
 /** Set the comms flush size.
  * A packet will be sent whenever this many characters are sent.
  * @param size number of characters to buffer before sending a packet
  */
-boolean WiFly::setFlushSize(uint16_t size)
+
+/*boolean WiFly::setFlushSize(uint16_t size)
+// Removed for WiFiModem
 {
     if (size > 1460) {
-	/* Maximum size */
+	//M aximum size
 	size = 1460;
     }
 
     return setopt(PSTR("set comm size"), size);
-}
+}*/
 
 /** Set the WiFly IO function option */
-boolean WiFly::setIOFunc(const uint8_t func)
+/*boolean WiFly::setIOFunc(const uint8_t func)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set sys iofunc"), func, HEX);
-}
+}*/
 
 /**
  * Enable data trigger mode.  This mode will automatically send a new packet based on several conditions:
@@ -2116,7 +2147,8 @@ boolean WiFly::setIOFunc(const uint8_t func)
  * @returns true on success, else false.
  * @note as of 2.32 firmware, the flushTimeout parameter does not take affect until after a save and reboot.
  */
-boolean WiFly::enableDataTrigger(const uint16_t flushTimeout, const char flushChar, const uint16_t flushSize)
+/*boolean WiFly::enableDataTrigger(const uint16_t flushTimeout, const char flushChar, const uint16_t flushSize)
+// Removed for WiFiModem
 {
     bool res=true;
 
@@ -2138,7 +2170,7 @@ boolean WiFly::disableDataTrigger()
     res = res && setFlushSize(64);
 
     return res;
-}
+}*/
 
 /** Hide passphrase and key */
 boolean WiFly::hide()
@@ -2165,13 +2197,14 @@ boolean WiFly::setSSID(const char *buf)
  * @param channel the wifi channel from 0 to 13. 0 means auto channel scan.
  * @returns true if successful, else false.
  */
-boolean WiFly::setChannel(uint8_t channel)
+/*boolean WiFly::setChannel(uint8_t channel)
+// Removed for WiFiModem
 {
     if (channel > 13) {
 	channel = 13;
     }
     return setopt(PSTR("set wlan chan"), channel);
-}
+}*/
 
 /** Set WEP key */
 boolean WiFly::setKey(const char *buf)
@@ -2210,13 +2243,14 @@ boolean WiFly::setPassphrase(const char *buf)
  * Set the space replacement character in WPA passphrase.
  * Default is '$'.
  */
-boolean WiFly::setSpaceReplace(char ch)
+/*boolean WiFly::setSpaceReplace(char ch)
+// Removed for WiFiModem
 {
     char buf[2] = { ch, 0 };
 
     replaceChar = ch;
     return setopt(PSTR("set opt replace"), buf);
-}
+}*/
 
 char WiFly::getSpaceReplace(void)
 {
@@ -2251,7 +2285,8 @@ const static struct {
  * @returns true on success, false on failure.
  * @note rates are rounded up to the nearest valid value
  */
-boolean WiFly::setRate(uint32_t rate)
+/*boolean WiFly::setRate(uint32_t rate)
+// Removed for WiFiModem
 {
     uint8_t setting = WIFLY_RATE_54MBPS;
 
@@ -2262,13 +2297,14 @@ boolean WiFly::setRate(uint32_t rate)
 	}
     }
     return setopt(PSTR("set wlan rate"), setting);
-}
+}*/
 
 /**
  * Return the current WiFi data rate in bits/sec
  * @returns current data rate in bits/sec
  */
-uint32_t WiFly::getRate()
+/*uint32_t WiFly::getRate()
+// Removed for WiFiModem
 {
     uint8_t rate = getopt(WIFLY_GET_RATE);
 
@@ -2282,8 +2318,8 @@ uint32_t WiFly::getRate()
 	}
     }
 
-    return 0;	/* Unknown */
-}
+    return 0;	// Unknown
+}*/
 
 /**
  * Set the transmit power level.
@@ -2291,27 +2327,29 @@ uint32_t WiFly::getRate()
  * @returns true on success, false on failure.
  * @ Note: a setting of 0 means max power which is 12 dBm.
  */
-boolean WiFly::setTxPower(uint8_t dBm)
+/*boolean WiFly::setTxPower(uint8_t dBm)
+// Removed for WiFiModem
 {
     if (dBm > 12) {
 	dBm = 12;
     }
     return setopt(PSTR("set wlan tx"), dBm);
-}
+}*/
 
 /**
  * Get the current transmit power.
  * @returns tx power in dBm
  */
-uint8_t WiFly::getTxPower()
+/*uint8_t WiFly::getTxPower()
+// Removed for WiFiModem
 {
     uint8_t power = getopt(WIFLY_GET_POWER);
     if (power == 0) {
-	/* 0 means max power, or 12 dBm */
+	// 0 means max power, or 12 dBm
 	power = 12;
     }
     return power;
-}
+}*/
 
 
 /**
@@ -2321,10 +2359,11 @@ uint8_t WiFly::getTxPower()
  * @param msecs the number of milliseconds between beacon
  * @returns true on success, false on failure.
  */
-boolean WiFly::setAdhocBeacon(const uint16_t msecs)
+/*boolean WiFly::setAdhocBeacon(const uint16_t msecs)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set adhoc beacon"), msecs);
-}
+}*/
 
 /**
  * Set the ad hoc network probe period.  When this number of seconds
@@ -2333,7 +2372,8 @@ boolean WiFly::setAdhocBeacon(const uint16_t msecs)
  * @param secs the number of seconds in the probe period.
  * @returns true on success, false on failure.
  */
-boolean WiFly::setAdhocProbe(const uint16_t secs)
+/*boolean WiFly::setAdhocProbe(const uint16_t secs)
+// Removed for WiFiModem
 {
     return setopt(PSTR("set adhoc probe"), secs);
 }
@@ -2351,7 +2391,7 @@ uint16_t WiFly::getAdhocProbe()
 uint16_t WiFly::getAdhocReboot()
 {
     return getopt(WIFLY_GET_REBOOT);
-}
+}*/
 
 /** join a wireless network */
 boolean WiFly::join(const char *ssid, uint16_t timeout)
@@ -2441,11 +2481,12 @@ boolean WiFly::leave()
 }
 
 /** Check to see if the WiFly is connected to a wireless network */
-boolean WiFly::isAssociated()
+/*boolean WiFly::isAssociated()
+// Removed for WiFiModem
 {
     getConnection();
     return (status.assoc == 1);
-}
+}*/
 
 /**
  * finishCommand() added as the RN-XV 171 4.41 firmware does NOT
@@ -2471,7 +2512,8 @@ boolean WiFly::setBaud(uint32_t baud)
 }
 
 /** See if the string is a valid dot quad IP address */
-boolean WiFly::isDotQuad(const char *addr)
+/*boolean WiFly::isDotQuad(const char *addr)
+// Removed for WiFiModem
 {
     uint32_t value;
 
@@ -2484,7 +2526,7 @@ boolean WiFly::isDotQuad(const char *addr)
 	    addr++;
 	}
 	if (ind == 3) {
-	    /* Got a match if this is the end of the string */
+	    // Got a match if this is the end of the string
 	    return *addr == '\0';
 	}
 	if (*addr != '.') {
@@ -2493,15 +2535,16 @@ boolean WiFly::isDotQuad(const char *addr)
     }
 
     return false;
-}
+}*/
 
 
 /** Send final chunk, end of HTTP message */
-void WiFly::sendChunkln()
+/*void WiFly::sendChunkln()
+// Removed for WiFiModem
 {
     serial->println('0');
     serial->println();
-}
+}*/
 
 /**
  * Send a string as an HTTP chunk with newline
@@ -2509,12 +2552,13 @@ void WiFly::sendChunkln()
  * by the string.
  * @param str the string to send
  */
-void WiFly::sendChunkln(const char *str)
+/*void WiFly::sendChunkln(const char *str)
+// Removed for WiFiModem
 {
     serial->println(strlen(str)+2,HEX);
     serial->println(str);
     serial->println();
-}
+}*/
 
 /**
  * Send a progmame string as an HTTP chunk with newline
@@ -2522,12 +2566,13 @@ void WiFly::sendChunkln(const char *str)
  * by the string.
  * @param str the string to send
  */
-void WiFly::sendChunkln(const __FlashStringHelper *str)
+/*void WiFly::sendChunkln(const __FlashStringHelper *str)
+// Removed for WiFiModem
 {
     serial->println(strlen_P((const prog_char *)str)+2,HEX);
     serial->println(str);
     serial->println();
-}
+}*/
 
 /**
  * Send a string as an HTTP chunk without a newline
@@ -2535,11 +2580,13 @@ void WiFly::sendChunkln(const __FlashStringHelper *str)
  * by the string.
  * @param str the string to send
  */
+/*
+// Removed for WiFiModem
 void WiFly::sendChunk(const char *str)
 {
     serial->println(strlen(str),HEX);
     serial->println(str);
-}
+}*/
 
 /**
  * Send a progmem string as an HTTP chunk without a newline.
@@ -2547,11 +2594,12 @@ void WiFly::sendChunk(const char *str)
  * by the string.
  * @param str the string to send
  */
-void WiFly::sendChunk(const __FlashStringHelper *str)
+/*void WiFly::sendChunk(const __FlashStringHelper *str)
+// Removed for WiFiModem
 {
     serial->println(strlen_P((const prog_char *)str),HEX);
     serial->println(str);
-}
+}*/
 
 /**
  * Ping the specified host. Return true if a ping response
@@ -2560,13 +2608,14 @@ void WiFly::sendChunk(const __FlashStringHelper *str)
  * @retval true - received ping response
  * @retval false - no response from host
  */
-boolean WiFly::ping(const char *host)
+/*boolean WiFly::ping(const char *host)
+// Removed for WiFiModem
 {
     char ip[16];
     const char *addr = host;
 
     if (!isDotQuad(host)) {
-	/* do a DNS lookup to get the IP address */
+	// do a DNS lookup to get the IP address
 	if (!getHostByName(host, ip, sizeof(ip))) {
 	    return false;
 	}
@@ -2594,7 +2643,7 @@ boolean WiFly::ping(const char *host)
 
     finishCommand();
     return false;
-}
+}*/
 
 /**
  * Create an Adhoc WiFi network.
@@ -2605,6 +2654,8 @@ boolean WiFly::ping(const char *host)
  * @retval false - failed
  * @note the WiFly is rebooted as the final step of this command.
  */
+/*
+// Removed for WiFiModem
 boolean WiFly::createAdhocNetwork(const char *ssid, uint8_t channel)
 {
     startCommand();
@@ -2619,7 +2670,7 @@ boolean WiFly::createAdhocNetwork(const char *ssid, uint8_t channel)
     finishCommand();
     reboot();
     return true;
-}
+}*/
 
 /**
  * Open a TCP connection.
@@ -2844,10 +2895,11 @@ boolean WiFly::sendto(
  * @retval true - packet send successfully
  * @retval false - failed to send packet
  */
-boolean WiFly::sendto(const uint8_t *data, uint16_t size, const char *host, uint16_t port)
+/*boolean WiFly::sendto(const uint8_t *data, uint16_t size, const char *host, uint16_t port)
+// Removed for WiFiModem
 {
     return sendto(data, size, NULL, host, port);
-}
+}*/
 
 /**
  * Send binary data as a UDP packet to a host.
@@ -2858,12 +2910,13 @@ boolean WiFly::sendto(const uint8_t *data, uint16_t size, const char *host, uint
  * @retval true - packet send successfully
  * @retval false - failed to send packet
  */
-boolean WiFly::sendto(const uint8_t *data, uint16_t size, IPAddress host, uint16_t port)
+/*boolean WiFly::sendto(const uint8_t *data, uint16_t size, IPAddress host, uint16_t port)
+// Removed for WiFiModem
 {
     char buf[16];
 
     return sendto(data, size, iptoa(host, buf, sizeof(buf)) , port);
-}
+}*/
 
 /**
  * Send a string as a UDP packet to a host.
@@ -2874,10 +2927,11 @@ boolean WiFly::sendto(const uint8_t *data, uint16_t size, IPAddress host, uint16
  * @retval true - packet send successfully
  * @retval false - failed to send packet
  */
-boolean WiFly::sendto(const char *data, const char *host, uint16_t port)
+/*boolean WiFly::sendto(const char *data, const char *host, uint16_t port)
+// Removed for WiFiModem
 {
     return sendto((uint8_t *)data, strlen(data), host, port);
-}
+}*/
 
 /**
  * Send a string as a UDP packet to a host.
@@ -2887,10 +2941,11 @@ boolean WiFly::sendto(const char *data, const char *host, uint16_t port)
  * @retval true - packet send successfully
  * @retval false - failed to send packet
  */
-boolean WiFly::sendto(const char *data, IPAddress host, uint16_t port)
+/*boolean WiFly::sendto(const char *data, IPAddress host, uint16_t port)
+// Removed for WiFiModem
 {
     return sendto((uint8_t *)data, strlen(data), host, port);
-}
+}*/
 
 /**
  * Send a string as a UDP packet to a host.
@@ -2901,10 +2956,11 @@ boolean WiFly::sendto(const char *data, IPAddress host, uint16_t port)
  * @retval true - packet send successfully
  * @retval false - failed to send packet
  */
-boolean WiFly::sendto(const __FlashStringHelper *flashData, const char *host, uint16_t port)
+/*boolean WiFly::sendto(const __FlashStringHelper *flashData, const char *host, uint16_t port)
+// Removed for WiFiModem
 {
     return sendto(NULL, 0, flashData, host, port);
-}
+}*/
 
 /**
  * Send a string as a UDP packet to a host.
@@ -2914,18 +2970,20 @@ boolean WiFly::sendto(const __FlashStringHelper *flashData, const char *host, ui
  * @retval true - packet send successfully
  * @retval false - failed to send packet
  */
-boolean WiFly::sendto(const __FlashStringHelper *flashData, IPAddress host, uint16_t port)
+/*boolean WiFly::sendto(const __FlashStringHelper *flashData, IPAddress host, uint16_t port)
+// Removed for WiFiModem
 {
     char buf[16];
 
     return sendto(NULL, 0, flashData, iptoa(host, buf, sizeof(buf)), port);
-}
+}*/
 
 /**
  * Preserve the IP and Port set via setIP() and setPort() when using
  * sendto() function.
  */
-void WiFly::enableHostRestore()
+/*void WiFly::enableHostRestore()
+// Removed for WiFiModem
 {
     restoreHost = true;
     getHostIP(lastHost, sizeof(lastHost));
@@ -2934,16 +2992,17 @@ void WiFly::enableHostRestore()
     debug.print(F("enableHostRestore: stored "));
     debug.print(lastHost); debug.print(':'); debug.println(lastPort);
 #endif
-}
+}*/
 
 /**
  * Don't preserve the IP and Port set via setIP() and setPort() when using
  * sendto() function. The IP and Port will be left set by the last sendto() call.
  */
-void WiFly::disableHostRestore()
+/*void WiFly::disableHostRestore()
+// Removed for WiFiModem
 {
     restoreHost = false;
-}
+}*/
 
 /**
  * Check to see if the non-blocking open has completed.
@@ -3017,7 +3076,8 @@ boolean WiFly::openComplete()
  * Useful for debugging and manually setting and reading
  * WiFly options.
  */
-void WiFly::terminal()
+/*void WiFly::terminal()
+// Removed for WiFiModem
 {
 #ifdef DEBUG2
     debug.println(F("Terminal ready"));
@@ -3035,7 +3095,7 @@ void WiFly::terminal()
 #endif
 	}
     }
-}
+}*/
 
 /**
  * Close the TCP connection
