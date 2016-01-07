@@ -1,3 +1,46 @@
+Version 0.09 - WiFiModem-Menu-009.hex / WiFiModem-Hayes-009.hex
+---------------------------------------------------------------
+New:
+-Fix for issue with C64 to modem flow control
+-Improved telnet detection
+
+Hayes:
+-Can now escape to AT command mode after connecting to a host using +++.
+-Guard time added to +++ (must wait 1 second before issuing +++)
+-ATS2 command register for changing escape character.  Default is ATS2=43 (+).
+-ATX0-4 support:
+   X0 = 0-4
+   X1 = 0-5, 10+
+   X2 = 0-6, 10+
+   X3 = 0-5, 7, 10+
+   X4 = 0-7, 10+
+
+   0 - OK
+   1 - CONNECT
+   2 - RING
+   3 - NO CARRIER
+   4 - ERROR
+   5 - CONNECT 1200
+   6 - NO DIALTONE	(DNS failure)
+   7 - BUSY		(Connection failure)
+   8 - NO ANSWER	(not implemented)
+   10 - CONNECT 2400
+   11 - CONNECT 4800
+   .
+   .
+-1200 baud support for inbound connections.
+-ATH1 to take modem off-hook (WiFly goes to sleep) to prevent incoming connections.
+-Default phone book entries when clearing have been removed.
+-AT&SSID= changed to AT*S=
+-AT&PASS= changed to AT*P=
+-AT&KEY= changed to AT*K=
+
+Menu:
+-Can now abort waiting for inbound connection by pressing any key.
+-Option to clear phone book
+-Improved character input routines in menus
+
+
 Version 0.08 - WiFiModem-Menu-008.hex / WiFiModem-Hayes-008.hex
 ---------------------------------------------------------------
 
