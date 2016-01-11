@@ -2,8 +2,6 @@
 Commodore 64 - MicroView - Wi-Fi Cart
 Copyright 2015-2016 Leif Bloomquist and Alex Burger
 
-With assistance and code from Greg Alekel and Payton Byrd
-
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2
 as published by the Free Software Foundation.
@@ -17,6 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
+
+/* Written with assistance and code from Greg Alekel and Payton Byrd */
 
 
 /* TODO
@@ -34,7 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 // Defining HAYES enables Hayes commands and disables the 1) and 2) menu options for telnet and incoming connections.
 // This is required to ensure the compiled code is <= 30,720 bytes 
 // Free memory at AT command prompt should be around 300.  At 200, ATI output is garbled.
-#define HAYES     // Also define in WiFlyHQ.cpp!
+//#define HAYES     // Also define in WiFlyHQ.cpp!
 
 #ifdef MICROVIEW
 #include <MicroView.h>
@@ -48,7 +48,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.09b3"
+#define VERSION "0.09"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -802,8 +802,8 @@ void ShowInfo(boolean powerup)
     char ip[20];
     char ssid[20];
     C64Println();
-    C64Serial.print(freeRam());
-    C64Println();
+    //C64Serial.print(freeRam());
+    //C64Println();
        
     wifly.getMAC(mac, 20);    // Sometimes the first time contains garbage..
     wifly.getMAC(mac, 20);
@@ -1849,6 +1849,20 @@ void Modem_ProcessCommandBuffer()
                     suppressOkError = true;
                     Modem_Disconnect();
                     break;
+                }
+                break;
+
+            // Accept the command, but do nothing..
+            case 'M':
+                switch (Modem_CommandBuffer[i++])
+                {
+                case '0':
+                case '1':
+                case '2':
+                    break;
+
+                default:
+                    errors++;
                 }
                 break;
 

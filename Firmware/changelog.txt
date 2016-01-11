@@ -8,6 +8,8 @@ Hayes:
 -Can now escape to AT command mode after connecting to a host using +++.
 -Guard time added to +++ (must wait 1 second before issuing +++)
 -ATS2 command register for changing escape character.  Default is ATS2=43 (+).
+-ATM0-3 support.  Does nothing but won't cause an error for BBSs that send
+ in init string.
 -ATX0-4 support:
    X0 = 0-4
    X1 = 0-5, 10+
