@@ -1,3 +1,26 @@
+Version 0.10 - WiFiModem-Menu-010.hex / WiFiModem-Hayes-010.hex
+---------------------------------------------------------------
+New:
+
+Hayes:
+-Sending AT commands in uppercase PETSCII is now supported.  Response will 
+ also be in PETSCII uppercase (0xc1-0xda) as seen on real modems.
+-Removed PETSCII translation for text input and displayed text to save space.
+ Use ASCII mode for setting the SSID / passphrase.
+-Fix for modem not always going off-hook with ath1.
+-ath0/1 now prints OK instead of NO CARRIER.
+-auto-answer now prints RING before connecting.
+-CommodoreServer.com 38,400 baud support.  See manual for details.
+-ATS99 command register to disable AT ERROR responses.  Should only be used 
+ when running a program that uses AT commands that are not supported by the
+ modem and does not allow for the AT initialization string to be changed.
+-Removed ATM0-3 support which did nothing but was previously added to prevent 
+ an AT command error with BBSs that send it in the init string.  Use ATS99
+ instead.
+-Added AT*M= command to set a message that will be displayed after a remote 
+ user connects for incoming connections.
+
+
 Version 0.09 - WiFiModem-Menu-009.hex / WiFiModem-Hayes-009.hex
 ---------------------------------------------------------------
 New:
@@ -8,8 +31,8 @@ Hayes:
 -Can now escape to AT command mode after connecting to a host using +++.
 -Guard time added to +++ (must wait 1 second before issuing +++)
 -ATS2 command register for changing escape character.  Default is ATS2=43 (+).
--ATM0-3 support.  Does nothing but won't cause an error for BBSs that send
- in init string.
+-ATM0-3 support.  Does nothing but won't cause an AT command error for BBSs 
+ that send it in init string.
 -ATX0-4 support:
    X0 = 0-4
    X1 = 0-5, 10+

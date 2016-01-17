@@ -1526,14 +1526,18 @@ boolean WiFly::sleep(uint16_t seconds)
     if (!startCommand()) {
         return false;
     }
+    Serial.flush();
+    delay(500);
     send_P(PSTR("sleep\r"));
     inCommandMode = false;
     sleeping = true;
     return true;
 }
 
-// When it wakes up, it's in DATA mode so there is no output as printlvl is 0.
-// Go into command mode to see the output and look for GW=
+/* When it wakes up, it's in DATA mode so there is no output as printlvl is 0.
+   Go into command mode to see the output and look for GW=
+   4.71 wakes back up at the last saved baud rate, not the last instant baud
+   rate. */
 void WiFly::wake()
 {
     if(sleeping)
@@ -2491,6 +2495,8 @@ boolean WiFly::leave()
 /**
  * finishCommand() added as the RN-XV 171 4.41 firmware does NOT
  * exit command mode after setting the instant baud rate.
+ * FIXME:  setopt won't get AOK from set u i because it's immediate.. 
+ *         Send another command after this one to get things back in order.
  * 12/12/15 - Alex Burger
  */
 boolean WiFly::setBaud(uint32_t baud)

@@ -48,7 +48,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.09"
+#define VERSION "0.10b1"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -89,10 +89,12 @@ boolean escapeReceived = false;
 
 char autoConnectHost = 0;
 //boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connect once..
-#define ADDR_HOST_SIZE     40
-#define ADDR_HOST_ENTRIES  9
+#define ADDR_HOST_SIZE              40
+#define ADDR_ANSWER_MESSAGE_SIZE    75              // Currently limited by the AT command line buffer size which is 80..
+#define ADDR_HOST_ENTRIES           9
     
 // EEPROM Addresses
+// Microview has 1K
 #define ADDR_PETSCII       0
 //#define ADDR_AUTOSTART     1
 #define ADDR_BAUD_LO       2
@@ -106,11 +108,13 @@ char autoConnectHost = 0;
 #define ADDR_MODEM_DCD_INVERTED 16
 #define ADDR_MODEM_DCD          17
 #define ADDR_MODEM_X_RESULT     18
+#define ADDR_MODEM_SUP_ERRORS   19
 
 #define ADDR_HOST_AUTO          99     // Autostart host number
-#define ADDR_HOSTS              100    // to 299 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 5
+#define ADDR_HOSTS              100    // to 460 with ADDR_HOST_SIZE = 40 and ADDR_HOST_ENTRIES = 9
 #define STATIC_PB_ENTRIES       2
 //#define ADDR_xxxxx            300
+#define ADDR_ANSWER_MESSAGE     800    // to 874 with ADDR_ANSWER_MESSAGE_SIZE = 75
 
 // Hayes variables
 #ifdef HAYES
@@ -123,6 +127,7 @@ boolean Modem_QuietMode = false;
 boolean Modem_S0_AutoAnswer = false;
 char    Modem_S2_EscapeCharacter = '+';
 byte    Modem_X_Result = 0;
+boolean Modem_suppressErrors = false;
 
 #define COMMAND_BUFFER_SIZE  81
 char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
@@ -136,10 +141,19 @@ boolean Modem_flowControl = false;   // for &K setting.
 boolean Modem_isDcdInverted = false;
 boolean Modem_DCDFollowsRemoteCarrier = false;    // &C
 int WiFlyLocalPort = 0;
-//int max_buffer_size_reached = 0;            // For debugging 1200 baud buffer
+boolean cts_rts_inverted = true;           // Normally true on the C64.  False for commodoreserver 38,400.
+#ifdef HAYES
+boolean petscii_mode_guess = false;
+boolean commodoreServer38k = false;
+#endif
+                                           //int max_buffer_size_reached = 0;            // For debugging 1200 baud buffer
 
-// PETSCII state
+/* PETSCII state.  Always use ASCII for Hayes.  
+   To set SSID, user must use ASCII mode.
+  */
+#ifndef HAYES
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
+#endif
 
 // Autoconnect Options
 #define AUTO_NONE     0
@@ -227,12 +241,17 @@ int main(void)
 
     // Force CTS to defaults on both sides to start, so data can get through
     digitalWriteFast(WIFI_CTS, LOW);
-    digitalWriteFast(C64_CTS, HIGH);  // C64 is inverted
+    digitalWriteFast(C64_CTS, (cts_rts_inverted ? HIGH : LOW));
+    //digitalWriteFast(C64_CTS, HIGH);  
 
     //WifiSerial.begin(WiFly_BAUD_RATE);
     
     C64Serial.println();
+#ifdef HAYES
+    DisplayBoth(F("WI-FI INIT..."));
+#else
     DisplayBoth(F("Wi-Fi Init..."));
+#endif
 
 #ifdef DEBUG
     boolean ok = wifly.begin(&WifiSerial, &C64Serial);
@@ -242,11 +261,19 @@ int main(void)
 
     if (ok)
     {
+#ifdef HAYES
+        DisplayBoth(F("WI-FI OK!"));
+#else
         DisplayBoth(F("Wi-Fi OK!"));
+#endif
     }
     else
     {
+#ifdef HAYES
+        DisplayBoth(F("WI-FI FAILED!"));
+#else
         DisplayBoth(F("Wi-Fi Failed!"));
+#endif
         RawTerminalMode();
     }
 
@@ -271,8 +298,9 @@ int main(void)
    
     //C64Println();
 #ifdef HAYES
-    C64Println(F("\r\nCommodore Wi-Fi Modem Hayes Emulation"));
-    ShowPETSCIIMode();
+    //C64Println(F("\r\nCommodore Wi-Fi Modem Hayes Emulation"));
+    C64Println(F("\r\COMMODORE WI-FI MODEM HAYES EMULATION"));
+    //ShowPETSCIIMode();
     C64Println();
     ShowInfo(true);
     HayesEmulationMode();
@@ -360,7 +388,10 @@ void Configuration()
 
         switch (option)
         {
-        case '1': ShowInfo(false);
+        case '1': 
+            ShowInfo(false);
+            delay(1000);        // Sometimes menu doesn't appear properly after 
+                                // showInfo().  May only be at high speeds such as 38400.  Trying this..
             break;
 
         case '2': ChangeSSID();
@@ -642,6 +673,9 @@ void DisplayBothP(const char *message)
 
 void C64Print(String message)
 {
+#ifdef HAYES
+    C64Serial.print(message);
+#else
     if (petscii_mode)
     {
         C64Serial.print(petscii::ToPETSCII(message.c_str()));
@@ -650,6 +684,7 @@ void C64Print(String message)
     {
         C64Serial.print(message);
     }
+#endif
 }
 
 void C64Println(String message)
@@ -661,6 +696,9 @@ void C64Println(String message)
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
 void C64PrintP(const char *message)
 {
+#ifdef HAYES
+    C64Serial.print(message);
+#else
     if (petscii_mode)
     {
         C64Serial.print(petscii::ToPETSCII(message));
@@ -669,6 +707,7 @@ void C64PrintP(const char *message)
     {
         C64Serial.print(message);
     }
+#endif
 }
 
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
@@ -683,6 +722,7 @@ void C64Println()
     C64Serial.println();
 }
 
+#ifndef HAYES
 void ShowPETSCIIMode()
 {
     C64Println();
@@ -709,19 +749,19 @@ void ShowPETSCIIMode()
         C64Serial.print(F("ASCII Mode"));
     }
 
-#ifndef HAYES
+//#ifndef HAYES
     C64Println(F(" (Del to switch)"));
-#endif  // HAYES
+//#endif  // HAYES
 
     C64Println();
 }
-
 
 void SetPETSCIIMode(boolean mode)
 {
     petscii_mode = mode;
     updateEEPROMByte(ADDR_PETSCII,petscii_mode);
 }
+#endif  // HAYES
 
 
 // ----------------------------------------------------------
@@ -805,30 +845,39 @@ void ShowInfo(boolean powerup)
     //C64Serial.print(freeRam());
     //C64Println();
        
-    wifly.getMAC(mac, 20);    // Sometimes the first time contains garbage..
+    wifly.getPort();    // Sometimes the first time contains garbage..
     wifly.getMAC(mac, 20);
     wifly.getIP(ip, 20);
     wifly.getSSID(ssid, 20);
     WiFlyLocalPort = wifly.getPort();   // Port WiFly listens on.  0 = disabled.
 
+#ifdef HAYES
+    //C64Println();
+    C64Print(F("MAC ADDRESS: "));    C64Println(mac);
+    C64Print(F("IP ADDRESS:  "));    C64Println(ip);
+    C64Print(F("WI-FI SSID:  "));    C64Println(ssid);
+    C64Print(F("FIRMWARE:    "));    C64Println(VERSION);
+    C64Print(F("LISTEN PORT: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
+
+    if (!powerup) {
+        char at_settings[40];
+        //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"), Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses, Modem_DCDFollowsRemoteCarrier, Modem_flowControl, Modem_S0_AutoAnswer);
+        sprintf_P(at_settings, PSTR("\r\n ATE%dQ%dV%d&C%dX%d&K%dS0=%dS2=%dS99=%d"),Modem_EchoOn,Modem_QuietMode,Modem_VerboseResponses,Modem_DCDFollowsRemoteCarrier, Modem_X_Result,Modem_flowControl,Modem_S0_AutoAnswer,(int)Modem_S2_EscapeCharacter, Modem_suppressErrors);
+        C64Print(F("CURRENT INIT:"));    C64Println(at_settings);
+        //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
+        sprintf_P(at_settings, PSTR("\r\n ATE%dQ%dV%d&C%dX%d&K%dS0=%dS2=%dS99=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD), EEPROM.read(ADDR_MODEM_X_RESULT),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS),EEPROM.read(ADDR_MODEM_S2_ESCAPE), EEPROM.read(ADDR_MODEM_SUP_ERRORS));
+        C64Print(F("SAVED INIT:  "));    C64Println(at_settings);
+    }
+#else
     //C64Println();
     C64Print(F("MAC Address: "));    C64Println(mac);
     C64Print(F("IP Address:  "));    C64Println(ip);
     C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
     C64Print(F("Firmware:    "));    C64Println(VERSION);
     C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
-#ifdef HAYES
-    if (!powerup) {
-        char at_settings[40];
-        //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"), Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses, Modem_DCDFollowsRemoteCarrier, Modem_flowControl, Modem_S0_AutoAnswer);
-        sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%dX%d&K%dS0=%dS2=%d"),Modem_EchoOn,Modem_QuietMode,Modem_VerboseResponses,Modem_DCDFollowsRemoteCarrier, Modem_X_Result,Modem_flowControl,Modem_S0_AutoAnswer,(int)Modem_S2_EscapeCharacter);
-        C64Print(F("Current init:"));    C64Println(at_settings);
-        //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
-        sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%dX%d&K%dS0=%dS2=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD), EEPROM.read(ADDR_MODEM_X_RESULT),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS),EEPROM.read(ADDR_MODEM_S2_ESCAPE));
-        C64Print(F("Saved init:  "));    C64Println(at_settings);
-    }
 #endif
 
+#ifndef HAYES
 #ifdef MICROVIEW    
     if (powerup)
     {
@@ -851,6 +900,7 @@ void ShowInfo(boolean powerup)
         delay(1000);
     }
 #endif  // MICROVIEW    
+#endif  // HAYES
 }
 
 #ifndef HAYES
@@ -958,14 +1008,40 @@ int getPort(void)
 void Connect(String host, int port, boolean raw)
 {
     if (host == F("5551212")) {
-      host = F("qlink.lyonlabs.org");
-      port = 5190;
+        host = F("qlink.lyonlabs.org");
+        port = 5190;
     }
-    if (host == F("5551213")) {
-      host = F("q-link.net");
-      port = 5190;
+    else if (host == F("5551213")) {
+        host = F("q-link.net");
+        port = 5190;
     }
-      
+#ifdef HAYES
+    else if (host == F("CS38")) {
+        host = F("www.commodoreserver.com");
+        //host = F("192.168.4.145");
+        port = 1541;
+        //port = 23;commodoreServer38k
+        commodoreServer38k = true;
+        
+        if (BAUD_RATE != 38400)
+        {
+            BAUD_RATE = 38400;
+            C64Serial.flush();
+            WifiSerial.flush();
+            delay(1000);
+            setBaudWiFi(BAUD_RATE);
+            C64Serial.flush();
+            C64Serial.end();
+            C64Serial.begin(BAUD_RATE);
+            C64Serial.setTimeout(1000);
+            configureWiFly();
+        }
+        cts_rts_inverted = false;
+        Modem_flowControl = true;
+        delay(1000);
+    }
+#endif    // HAYES
+
     char temp[50];
     //sprintf_P(temp, PSTR("\r\nConnecting to %s"), host.c_str());
     snprintf_P(temp, (size_t)sizeof(temp), PSTR("\r\nConnecting to %s"), host.c_str());
@@ -984,7 +1060,7 @@ void Connect(String host, int port, boolean raw)
        if ((Modem_X_Result == 2) || (Modem_X_Result >= 4))  // >=2 but not 3 = Send NO DIALTONE           
            Modem_PrintResponse("6", F("NO DIALTONE"));
        else
-           //Modem_Disconnect();
+           //Modem_Disconnect(true);
            Modem_PrintResponse("3", F("NO CARRIER"));
 #endif
        return;
@@ -1012,7 +1088,7 @@ void Connect(String host, int port, boolean raw)
         if (Modem_X_Result >= 3)
             Modem_PrintResponse("7", F("BUSY"));
         else
-            //Modem_Disconnect();
+            //Modem_Disconnect(true);
             Modem_PrintResponse("3", F("NO CARRIER"));
 #else
         DisplayBoth(F("Connect Failed!"));
@@ -1020,11 +1096,6 @@ void Connect(String host, int port, boolean raw)
 //        if (Modem_DCDFollowsRemoteCarrier)
 //            digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
         return;
-    }
-
-    if (!raw)
-    {
-        CheckTelnet();
     }
 
     /*
@@ -1035,8 +1106,13 @@ void Connect(String host, int port, boolean raw)
     delay (2000);*/
 
 #ifdef HAYES
-    Modem_Connected();
+    Modem_Connected(false);
 #else
+    if (!raw)
+    {
+        CheckTelnet();
+    }
+
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
     TerminalMode();
@@ -1121,7 +1197,7 @@ void TerminalMode()
     wifly.close();
 
 #ifdef HAYES          
-    Modem_Disconnect();
+    Modem_Disconnect(true);
 #else
     DisplayBoth(F("Connection closed"));
 #endif
@@ -1180,7 +1256,8 @@ inline void DoFlowControlModemToC64()
     if (Modem_flowControl)
     {
         // Check that C64 is ready to receive
-        while (digitalReadFast(C64_RTS) == LOW)   // If not...  C64 RTS and CTS are inverted.
+        //while (digitalReadFast(C64_RTS == LOW))   // If not...  C64 RTS and CTS are inverted.
+        while (digitalReadFast(C64_RTS) == (cts_rts_inverted ? LOW : HIGH))
         {
             digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi and wait
         }
@@ -1194,12 +1271,13 @@ inline void DoFlowControlC64ToModem()
         // Check that C64 is ready to receive
         while (digitalReadFast(WIFI_RTS) == HIGH)   // If not...
         {
-            digitalWriteFast(C64_CTS, LOW);     // ..stop data from C64 and wait
+            digitalWriteFast(C64_CTS, (cts_rts_inverted ? LOW : HIGH));
+            //digitalWriteFast(C64_CTS, LOW);     // ..stop data from C64 and wait
         }
-        digitalWriteFast(C64_CTS, HIGH);
+        digitalWriteFast(C64_CTS, (cts_rts_inverted ? HIGH : LOW));
+        //digitalWriteFast(C64_CTS, HIGH);
     }
 }
-
 
 void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet parameters with host
 {
@@ -1352,8 +1430,9 @@ void HayesEmulationMode()
     digitalWriteFast(C64_RI, LOW);
     digitalWriteFast(C64_DSR, HIGH);
 
+    /* Already done in main()
     if (Modem_DCDFollowsRemoteCarrier == true)
-      digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
+      digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));*/
    
     Modem_LoadDefaults();
 
@@ -1361,6 +1440,7 @@ void HayesEmulationMode()
 
     Modem_ResetCommandBuffer();
 
+    delay (1000);            //  Sometimes text after ShowInfo at boot doesn't appear.  Trying this..
     C64Println();
     
     if (autoConnectHost >=1 && autoConnectHost <= ADDR_HOST_ENTRIES)
@@ -1420,13 +1500,84 @@ void Modem_PrintResponse(const char* code, const __FlashStringHelper * msg)
     //C64Println();  // Moved to top of Modem_ProcessCommandBuffer() so that 
                      // commands such as ati, at&pb? etc also get get an extra \r\n
 
+    
+    /* ASCII upper = 0x41-0x5a
+       ASCII lower = 0x61-0x7a
+       PETSCII upper = 0xc1-0xda (second uppercase area)
+       PETSCII lower = 0x41-0x5a
+
+       AT from C64 is 0xc1,0xd4.  A real modem will shift the response to match (-0x41 + 0xc1)
+       so that if a C64 sends At, the modem will responsd with Ok.  Other examples:
+       AT - OK
+       aT - oK
+       At - Ok
+       AT - OK
+       AtDt5551212 - No caRrier   Note: Not sure why R is capitalized.  Not implementing here..
+       ATdt5551212 - NO CARRIER   Note:  If AT is all upper, result is all upper
+       atDT5551212 - no carrier   Note:  If AT is all lower, result is all lower
+       */
+   
     if (!Modem_QuietMode)
     {
         if (Modem_VerboseResponses)
         {
-            //C64Println(msg);
-            C64Serial.print(msg);
-            C64Serial.println();
+            if (petscii_mode_guess)
+            {
+                // TODO - reduce memory usage
+                String temp = msg;
+                char response[15];      // CONNECT 38400 is longest?
+                strncpy(response, temp.c_str(), sizeof(response));
+
+                // Start with \r\n as seen with real modems.
+                C64Serial.print((char)0x8d);
+                C64Serial.print((char)0x8a);
+
+                // If AT is PETSCII uppercase, the entire response is shifted -0x41 + 0xc1 (including newline and return!)
+                // Newline/return = 0x8d / 0x8a
+
+                for (byte i = 0; response[i] != '\0'; i++)
+                {
+                    // Don't shift numbers.  May be others that shouldn't be shifted..
+                    if ((response[i] < 0x30) || (response[i] > 0x39))
+                        response[i] = response[i] + -0x41 + 0xc1;
+                }
+
+                /*
+                We don't really need this so to save space it has been removed, but it is correct...
+                Do not DELETE from source..
+                // If at is PETSCII lowercase / ASCII uppercase, response is no changed
+                else if ((Modem_LastCommandBuffer[0] == 41) && (Modem_LastCommandBuffer[1] == 0x54))
+                {}
+                // Otherwise we modify result to match AT command line.  Eg:
+                // At = Ok
+                // AtDt5551212 = NoCarrier
+                else {
+                for (byte i = 0; response[i] != '\0'; i++)
+                {
+                if (Modem_LastCommandBuffer[i] == '\0')
+                break;
+                if ((unsigned char)Modem_LastCommandBuffer[i] >= 0xc1)
+                response[i] = response[i] -0x41 + 0xc1;
+                }
+                } */
+
+                //C64Println(msg);
+                C64Serial.print(response);
+
+                /*char temp2[3];
+                sprintf(temp2, "\0x8d\0x8a");
+                C64Serial.print(temp2);*/
+                C64Serial.print((char)0x8d);
+                C64Serial.print((char)0x8a);
+                //C64Serial.println();
+            }
+            else {
+                // Start with \r\n as seen with real modems.
+                C64Println();
+                C64Println(msg);
+                //C64Serial.print(msg);
+                //C64Serial.println();
+            }
         }
         else
         {
@@ -1464,6 +1615,7 @@ void Modem_LoadDefaults(void)
     Modem_isDcdInverted = false;
     Modem_flowControl = false;
     Modem_DCDFollowsRemoteCarrier = false;
+    Modem_suppressErrors = false;
 
     Modem_DCD_Set();
 }
@@ -1480,6 +1632,7 @@ void Modem_LoadSavedSettings(void)
     Modem_isDcdInverted = EEPROM.read(ADDR_MODEM_DCD_INVERTED);
     Modem_DCDFollowsRemoteCarrier = EEPROM.read(ADDR_MODEM_DCD);
     Modem_X_Result = EEPROM.read(ADDR_MODEM_X_RESULT);
+    Modem_suppressErrors = EEPROM.read(ADDR_MODEM_SUP_ERRORS);
 
     Modem_DCD_Set();
 
@@ -1502,7 +1655,7 @@ void Modem_DCD_Set(void)
     }    
 }
 
-void Modem_Disconnect()
+void Modem_Disconnect(boolean printNoCarrier)
 {
     //char temp[15];
     Modem_isCommandMode = true;
@@ -1515,6 +1668,9 @@ void Modem_Disconnect()
     //C64PrintP(temp);
     //DisplayBoth(F("\n\rNO CARRIER\n\r"));
     //delay(100);
+    // Erase MicroView screen as NO CARRIER may not fit after RING, CONNECT etc.
+    uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
+    uView.setCursor(0, 0);
 
     if (wifly.available() == -1)
         wifly.close();
@@ -1524,7 +1680,8 @@ void Modem_Disconnect()
                                  // not set for incoming connections.
 
     //delay(500);
-    Modem_PrintResponse("3", F("NO CARRIER"));
+    if (printNoCarrier)
+        Modem_PrintResponse("3", F("NO CARRIER"));
 
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
@@ -1533,7 +1690,7 @@ void Modem_Disconnect()
 // Validate and handle AT sequence  (A/ was handled already)
 void Modem_ProcessCommandBuffer()
 {
-    boolean petscii_mode_guess = false;
+    //boolean petscii_mode_guess = false;
     byte errors = 0;
     //boolean dialed_out = 0;
     // Phonebook dial
@@ -1544,28 +1701,29 @@ void Modem_ProcessCommandBuffer()
     char atCommandFirstChars[] = "AEHIQVZ&RSD\r\n";   // Used for AT commands that have variable length values such as ATS2=45, ATS2=123
     char tempAsciiValue[3];
 
-    C64Println();   // Print an extra \r\n as seen on real modems
+    //C64Println();   // Print an extra \r\n as seen on real modems.  01/17/16 - moved back to Modem_PrintResponse
     
     // Simple PETSCII/ASCII detection
    
-    if (((Modem_CommandBuffer[0] == 'A') && (Modem_CommandBuffer[1] == 'T')))
-    {
+    if ((((unsigned char)Modem_CommandBuffer[0] == 0xc1) && ((unsigned char)Modem_CommandBuffer[1] == 0xd4)))
         petscii_mode_guess = true;
-    }
-    else if (((Modem_CommandBuffer[0] == 'a') && (Modem_CommandBuffer[1] == 't')))
+    else
+        petscii_mode_guess = false;
+
+    /*if (((Modem_CommandBuffer[0] == 'a') && (Modem_CommandBuffer[1] == 't')))
     {
         petscii_mode_guess = false;
     }
     else
     {
         return;  // Not an AT command, ignore silently
-    }
+    }*/
 
     // Only write to EEPROM if changed
-    if (petscii_mode_guess != petscii_mode)
+    /*if (petscii_mode_guess != petscii_mode)
     {
         SetPETSCIIMode(petscii_mode_guess);
-    }
+    }*/
 
     // Used for a/ and also for setting SSID, PASS, KEY as they require upper/lower
     strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);
@@ -1574,7 +1732,7 @@ void Modem_ProcessCommandBuffer()
 
     for (int i = 0; i < strlen(Modem_CommandBuffer); i++)
     {
-        Modem_CommandBuffer[i] = toupper(Modem_CommandBuffer[i]);
+        Modem_CommandBuffer[i] = toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[i]));
     }
 
     Display(Modem_CommandBuffer);
@@ -1645,7 +1803,7 @@ void Modem_ProcessCommandBuffer()
     }*/
     /*else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
     {
-        Modem_Disconnect();
+        Modem_Disconnect(true);
     }*/
     /*else if (strcmp(Modem_CommandBuffer, ("AT&RAW")) == 0)
     {
@@ -1720,6 +1878,7 @@ void Modem_ProcessCommandBuffer()
     // List phone book entries
     else if (strstr(Modem_CommandBuffer, ("AT&PB?")) != NULL)
     {
+        C64Println();
         for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
         {
             C64Serial.print(i+1);
@@ -1770,9 +1929,6 @@ void Modem_ProcessCommandBuffer()
         }
         else
             Modem_PrintERROR();
-            
-        //Display(readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)));
-        //delay(2000);
     }
 
     else if (strncmp(Modem_CommandBuffer, ("AT"), 2) == 0)
@@ -1781,13 +1937,13 @@ void Modem_ProcessCommandBuffer()
         {
             switch (Modem_CommandBuffer[i++])
             {
-            case 'Z':
+            case 'Z':   // ATZ
                 Modem_LoadSavedSettings();
                 if (wifly.isSleeping())
                     wake();
                 break;
 
-            case 'I':
+            case 'I':   // ATI
                 ShowInfo(false);
                 break;
 
@@ -1807,12 +1963,12 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;*/
 
-            case 'A':
+            case 'A':   // ATA
                 Modem_Answer();
                 suppressOkError = true;
                 break;
 
-            case 'E':
+            case 'E':   // ATE
                 switch (Modem_CommandBuffer[i++])
                 {
                 case '0':
@@ -1828,41 +1984,29 @@ void Modem_ProcessCommandBuffer()
                 }
                 break;
 
-            case 'H':
+            case 'H':       // ATH
                 switch (Modem_CommandBuffer[i++])
                 {
                 case '0':
-                    suppressOkError = true;
                     if (wifly.isSleeping())
                         wake();
-                    Modem_Disconnect();
+                    else
+                        Modem_Disconnect(false);
                     break;
 
                 case '1':
                     if (!wifly.isSleeping())
-                        wifly.sleep();
-                    setBaudWiFi2(2400);
+                        if (!wifly.sleep())
+                            errors++;
                     break;
 
                 default:
                     i--;                        // User entered ATH
-                    suppressOkError = true;
-                    Modem_Disconnect();
+                    if (wifly.isSleeping())
+                        wake();
+                    else
+                        Modem_Disconnect(false);
                     break;
-                }
-                break;
-
-            // Accept the command, but do nothing..
-            case 'M':
-                switch (Modem_CommandBuffer[i++])
-                {
-                case '0':
-                case '1':
-                case '2':
-                    break;
-
-                default:
-                    errors++;
                 }
                 break;
 
@@ -1891,7 +2035,7 @@ void Modem_ProcessCommandBuffer()
                 }
                 break;
 
-            case 'S':
+            case 'S':   // ATS
                 switch (Modem_CommandBuffer[i++])
                 {
                 case '0':
@@ -1939,10 +2083,31 @@ void Modem_ProcessCommandBuffer()
                         break;
                     }
                     break;
+
+                case '9':
+                    switch (Modem_CommandBuffer[i++])
+                    {
+                    case '9':
+                        switch (Modem_CommandBuffer[i++])
+                        {
+                        case '=':
+                            switch (Modem_CommandBuffer[i++])
+                            {
+                            case '0':
+                                Modem_suppressErrors = 0;
+                                break;
+
+                            case '1':
+                                Modem_suppressErrors = 1;
+                                break;
+                            }
+                        }
+                    }
+                    break;
                 }
                 break;
 
-            case 'V':
+            case 'V':   // ATV
                 switch (Modem_CommandBuffer[i++])
                 {
                 case '0':
@@ -1979,7 +2144,7 @@ void Modem_ProcessCommandBuffer()
                 11 - CONNECT 4800
                 etc..
                 */
-            case 'X':
+            case 'X':   // ATX
                 Modem_X_Result = (Modem_CommandBuffer[i++] - 48);
                 if (Modem_X_Result < 0 || Modem_X_Result > 4)
                 {
@@ -2009,7 +2174,7 @@ void Modem_ProcessCommandBuffer()
                 }*/
                 break;
 
-            case '&':
+            case '&':   // AT&
                 switch (Modem_CommandBuffer[i++])
                 {
                 case 'C':
@@ -2035,14 +2200,14 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                case 'F':
+                case 'F':   // AT&F
                     Modem_LoadDefaults();
                     if (wifly.isSleeping())
                         wake();
 
                     break;
 
-                case 'K':
+                case 'K':   // AT&K
                     switch (Modem_CommandBuffer[i++])
                     {
                     case '0':
@@ -2058,11 +2223,11 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                case 'R':
+                case 'R':   // AT&R
                     RawTerminalMode();
                     break;
 
-                case 'W':
+                case 'W':   // AT&W
                     updateEEPROMByte(ADDR_MODEM_ECHO, Modem_EchoOn);
                     updateEEPROMByte(ADDR_MODEM_FLOW, Modem_flowControl);
                     updateEEPROMByte(ADDR_MODEM_VERBOSE, Modem_VerboseResponses);
@@ -2071,9 +2236,10 @@ void Modem_ProcessCommandBuffer()
                     updateEEPROMByte(ADDR_MODEM_S2_ESCAPE, Modem_S2_EscapeCharacter);
                     updateEEPROMByte(ADDR_MODEM_DCD, Modem_DCDFollowsRemoteCarrier);
                     updateEEPROMByte(ADDR_MODEM_X_RESULT, Modem_X_Result);
+                    updateEEPROMByte(ADDR_MODEM_SUP_ERRORS, Modem_suppressErrors);
                     break;
 
-                case '-':
+                case '-':   // AT&-
                     C64Println();
                     C64Serial.print(freeRam());
                     C64Println();
@@ -2089,22 +2255,42 @@ void Modem_ProcessCommandBuffer()
                 }
                 break;
 
-            case '*':               // Moving &ssid, &pass and &key to * costs 56 flash but saves 26 mimimum RAM.
+            case '*':               // AT* Moving &ssid, &pass and &key to * costs 56 flash but saves 26 mimimum RAM.
                 switch (Modem_CommandBuffer[i++])
                 {
-                case 'S':
+                case 'M':   // AT*M     Message sent to remote side when answering
                     switch (Modem_CommandBuffer[i++])
                     {
                     case '=':
-                        if (petscii_mode)
-                            wifly.setSSID(petscii::ToASCII(Modem_LastCommandBuffer + i).c_str());
-                        else
-                            wifly.setSSID(Modem_LastCommandBuffer + i);
+                    {
+                        int j = 0;
+                        for (; j < ADDR_ANSWER_MESSAGE_SIZE-1; j++)
+                        {
+                            EEPROM.write(ADDR_ANSWER_MESSAGE + j, (Modem_LastCommandBuffer + i)[j]);
+                        }                   
+
+                        i = strlen(Modem_LastCommandBuffer);    // Consume the rest of the line.
+                        break;
+                    }
+                    
+                    default:
+                        errors++;
+                    }
+                    break;
+
+                case 'S':   // AT*S
+                    switch (Modem_CommandBuffer[i++])
+                    {
+                    case '=':
+                        //if (petscii_mode)
+                        //    wifly.setSSID(petscii::ToASCII(Modem_LastCommandBuffer + i).c_str());
+                        //else
+                        wifly.setSSID(Modem_LastCommandBuffer + i);
 
                         wifly.leave();
                         if (!wifly.join(20000))    // 20 second timeout
                             errors++;
-                        
+
                         i = strlen(Modem_LastCommandBuffer);    // Consume the rest of the line.
                         break;
 
@@ -2113,13 +2299,13 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                case 'P':
+                case 'P':   // AT*P
                     switch (Modem_CommandBuffer[i++])
                     {
                     case '=':
-                        if (petscii_mode)
-                            wifly.setPassphrase(petscii::ToASCII(Modem_LastCommandBuffer + i).c_str());
-                        else
+                        //if (petscii_mode)
+                        //    wifly.setPassphrase(petscii::ToASCII(Modem_LastCommandBuffer + i).c_str());
+                        //else
                             wifly.setPassphrase(Modem_LastCommandBuffer + i);
 
                         i = strlen(Modem_LastCommandBuffer);    // Consume the rest of the line.
@@ -2130,13 +2316,13 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                case 'K':
+                case 'K':   // AT*K
                     switch (Modem_CommandBuffer[i++])
                     {
                     case '=':
-                        if (petscii_mode)
-                            wifly.setKey(petscii::ToASCII(Modem_LastCommandBuffer + i).c_str());
-                        else
+                        //if (petscii_mode)
+                        //    wifly.setKey(petscii::ToASCII(Modem_LastCommandBuffer + i).c_str());
+                        //else
                             wifly.setKey(Modem_LastCommandBuffer + i);
 
                         i = strlen(Modem_LastCommandBuffer);    // Consume the rest of the line.
@@ -2152,7 +2338,7 @@ void Modem_ProcessCommandBuffer()
 
                 // Dialing should come last..
                 // TODO:  Need to allow for spaces after D, DT, DP.  Currently fails.
-            case 'D':
+            case 'D':   // ATD
                 switch (Modem_CommandBuffer[i++])
                 {
                 case '\0':                          /* ATD = ATO.  Probably don't need this...' */
@@ -2232,83 +2418,7 @@ void Modem_ProcessCommandBuffer()
             }
         }
     
-    
-    /*
-    else if (strncmp(Modem_CommandBuffer, ("AT"), 2) == 0)
-    {
-        if (strstr(Modem_CommandBuffer, ("E0")) != NULL)
-        {
-            Modem_EchoOn = false;
-        }
-
-        if (strstr(Modem_CommandBuffer, ("E1")) != NULL)
-        {
-            Modem_EchoOn = true;
-        }
-
-        if (strstr(Modem_CommandBuffer, ("Q0")) != NULL)
-        {
-            Modem_VerboseResponses = false;
-            Modem_QuietMode = false;
-        }
-
-        if (strstr(Modem_CommandBuffer, ("Q1")) != NULL)
-        {
-            Modem_QuietMode = true;
-        }
-
-        if (strstr(Modem_CommandBuffer, ("V0")) != NULL)
-        {
-            Modem_VerboseResponses = false;
-        }
-
-        if (strstr(Modem_CommandBuffer, ("V1")) != NULL)
-        {
-            Modem_VerboseResponses = true;
-        }
-
-        if (strstr(Modem_CommandBuffer, ("X0")) != NULL)
-        {
-            // TODO
-        }
-        if (strstr(Modem_CommandBuffer, ("X1")) != NULL)
-        {
-            // TODO
-        }
-        if (strstr(Modem_CommandBuffer, ("&K0")) != NULL)
-        {
-            Modem_flowControl = false;
-        }
-        if (strstr(Modem_CommandBuffer, ("&K1")) != NULL)
-        {
-            Modem_flowControl = true;
-        }
-        if (strstr(Modem_CommandBuffer, ("&W")) != NULL)
-        {
-            if (wifly.save())
-                Modem_PrintOK();
-            else
-                Modem_PrintERROR();
-        }
-*/
-        /*char *currentS;
-        char temp[100];
-
-        int offset = 0;
-        if ((currentS = strstr(Modem_CommandBuffer, ("S0="))) != NULL)
-        {
-            offset = 3;
-            while (currentS[offset] != '\0' && isDigit(currentS[offset]))
-            {
-                offset++;
-            }
-
-            memset(temp, 0, 100);
-            strncpy(temp, currentS + 3, offset - 3);
-            Modem_S0_AutoAnswer = atoi(temp);
-        }*/
-
-        if (!suppressOkError) {    // Should add error checking to calls to Modem_Dialout(), Connect() etc.
+        if (!suppressOkError && !Modem_suppressErrors) {    // TODO:  Should add error checking to calls to Modem_Dialout(), Connect() etc.
             if (errors)   
                 Modem_PrintERROR();
             else
@@ -2317,9 +2427,11 @@ void Modem_ProcessCommandBuffer()
     }
     else
     {
-        if (!suppressOkError)
+        if (!suppressOkError && !Modem_suppressErrors)
             Modem_PrintERROR();
     }
+    if (!suppressOkError && Modem_suppressErrors)
+        Modem_PrintOK();
 
     //strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);   // can't be here, already switched to uppercase
     Modem_ResetCommandBuffer();
@@ -2331,11 +2443,15 @@ void Modem_Ring()
 
     if (Modem_S0_AutoAnswer != 0)
     {
+        Modem_PrintResponse("2", F("\r\nRING"));
+        digitalWriteFast(C64_RI, HIGH);
+        delay(250);
+        digitalWriteFast(C64_RI, LOW);
         Modem_Answer();
     }
     else
     {
-        Modem_PrintResponse("2", F("RING"));
+        Modem_PrintResponse("2", F("\r\nRING"));
 
         //if (Modem_DCDFollowsRemoteCarrier)
         //    digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
@@ -2346,7 +2462,7 @@ void Modem_Ring()
     }
 }
 
-void Modem_Connected()
+void Modem_Connected(boolean incoming)
 {
     if (Modem_X_Result == 0)
     {
@@ -2378,70 +2494,33 @@ void Modem_Connected()
         }
     }
 
-    /*char temp[20];
-    if (Modem_X_Result > 0)
-    {
-        sprintf_P(temp, PSTR("CONNECT %u"), BAUD_RATE);
-        DisplayBothP(temp);
-    }
-    else
-    {
-        DisplayBoth(F("CONNECT"));
-    }*/
-
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
+    
+    if (!commodoreServer38k)
+        CheckTelnet();
 
-    CheckTelnet();
-     
     Modem_isConnected = true;
     Modem_isCommandMode = false;
     Modem_isRinging = false;
-  
-/*
-    if (_verboseResponses)
-    {
-        _serial->print(F("CONNECT "));
-    }
 
-    if (_baudRate == 38400)
-    {
-        Modem_PrintResponse("28", F("38400"));
-    }
-    else if (_baudRate == 19200)
-    {
-        printResponse("15", F("19200"));
-    }
-    else if (_baudRate == 14400)
-    {
-        printResponse("13", F("14400"));
-    }
-    else if (_baudRate == 9600)
-    {
-        printResponse("12", F("9600"));
-    }
-    else if (_baudRate == 4800)
-    {
-        printResponse("11", F("4800"));
-    }
-    else if (_baudRate == 2400)
-    {
-        printResponse("10", F("2400"));
-    }
-    else if (_baudRate == 1200)
-    {
-        printResponse("5", F("1200"));
-    }
-    else
-    {
-        if (!_verboseResponses)
-            _serial->println('1');
-        else
+    if (incoming) {
+        if (EEPROM.read(ADDR_ANSWER_MESSAGE))
         {
-            _serial->println(_baudRate);
+            for (int j = 0; j < ADDR_ANSWER_MESSAGE_SIZE - 1; j++)
+            {
+                // Assuming it was stored correctly with a trailing \0
+                char temp = EEPROM.read(ADDR_ANSWER_MESSAGE + j);
+                if (temp == '^')
+                    wifly.print("\r\n");
+                else
+                    wifly.print(temp);
+                if (temp == 0)
+                    break;
+            }
+            wifly.println();
         }
     }
-    */
 }
 
 void Modem_ProcessData()
@@ -2456,19 +2535,37 @@ void Modem_ProcessData()
         if (Modem_isCommandMode)
         {
             unsigned char unsignedInbound;
+            //boolean petscii_char;
             
-            if (Modem_flowControl) 
-                digitalWriteFast(C64_CTS, LOW);
+            if (Modem_flowControl)
+            {
+                digitalWriteFast(C64_CTS, (cts_rts_inverted ? LOW : HIGH));
+                //digitalWriteFast(C64_CTS, LOW);
+            }
             //char inbound = toupper(_serial->read());
             char inbound = C64Serial.read();
+            // C64 PETSCII terminal programs send lower case 0x41-0x5a, upper case as 0xc1-0xda
+            /* Real modem:
+            ASCII at = OK
+            ASCII AT = OK
+            PET at = ok
+            PET AT = OK
+            */
+            /*if ((inbound >= 0xc1) && (inbound <= 0xda))
+                petscii_char = true;
+            inbound = charset_p_toascii_upper_only(inbound);
 
+            if (inbound == 0)
+                return;*/
+
+            
             // Block non-ASCII/PETSCII characters
             unsignedInbound = (unsigned char)inbound;
 
             // Do not delete this.  Used for troubleshooting...
-            /*char temp[5];
-            sprintf(temp, "-%d-",unsignedInbound);
-            C64Serial.write(temp);*/
+            //char temp[5];
+            //sprintf(temp, "-%d-",unsignedInbound);
+            //C64Serial.write(temp);
             
             if (unsignedInbound == 0x08 || unsignedInbound == 0x0a || unsignedInbound == 0x0d || unsignedInbound == 0x14) {}  // backspace, LF, CR, C= Delete
             else if (unsignedInbound <= 0x1f)
@@ -2504,20 +2601,26 @@ void Modem_ProcessData()
                 else {
                     Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
     
-                    if (toupper(Modem_CommandBuffer[0]) == 'A' && (Modem_CommandBuffer[1] == '/'))
+                    if (toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[0])) == 'A' && (Modem_CommandBuffer[1] == '/'))
                     {
                         strcpy(Modem_CommandBuffer, Modem_LastCommandBuffer);
-                        if (Modem_flowControl) 
-                            digitalWriteFast(C64_CTS, HIGH);
+                        if (Modem_flowControl)
+                        {
+                            digitalWriteFast(C64_CTS, (cts_rts_inverted ? HIGH : LOW));
+                            //digitalWriteFast(C64_CTS, HIGH);
+                        }
                         Modem_ProcessCommandBuffer();
                         Modem_ResetCommandBuffer();  // To prevent A matching with A/ again
                     }
                 }
             }
-            else if (toupper(Modem_CommandBuffer[0]) == 'A' && toupper(Modem_CommandBuffer[1]) == 'T')
+            else if (toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[0])) == 'A' && toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[1])) == 'T')
             {
-                if (Modem_flowControl) 
-                    digitalWriteFast(C64_CTS, HIGH);
+                if (Modem_flowControl)
+                {
+                    digitalWriteFast(C64_CTS, (cts_rts_inverted ? HIGH : LOW));
+                    //digitalWriteFast(C64_CTS, HIGH);
+                }
                 Modem_ProcessCommandBuffer();
             }
             else
@@ -2571,19 +2674,22 @@ void Modem_ProcessData()
         }
     }
     //digitalWrite(DCE_RTS, LOW);
-    if (Modem_flowControl) 
-        digitalWriteFast(C64_CTS, HIGH);
+    if (Modem_flowControl)
+    {
+        digitalWriteFast(C64_CTS, (cts_rts_inverted ? HIGH : LOW));
+        //digitalWriteFast(C64_CTS, HIGH);
+    }
 }
 
 void Modem_Answer()
 {
     if (!Modem_isRinging)    // If not actually ringing...
     {
-        Modem_Disconnect();  // This prints "NO CARRIER"
+        Modem_Disconnect(true);  // This prints "NO CARRIER"
         return;
     }
 
-    Modem_Connected();
+    Modem_Connected(true);
 }
 
 // Main processing loop for the virtual modem.  Needs refactoring!
@@ -2595,7 +2701,8 @@ void Modem_Loop()
         // Check for new remote connection
         if (!Modem_isConnected && !Modem_isRinging)
         {
-            wifly.println(F("CONNECTING TO SYSTEM."));
+            wifly.println(F("CONNECTING..."));
+            
             Display(F("INCOMING\nCALL"));
             Modem_Ring();
             return;
@@ -2676,14 +2783,14 @@ void Modem_Loop()
         // Check for a dropped remote connection while ringing
         if (Modem_isRinging)
         {
-            Modem_Disconnect();
+            Modem_Disconnect(true);
             return;
         }
     
         // Check for a dropped remote connection while connected
         if (Modem_isConnected)
         {
-            Modem_Disconnect();
+            Modem_Disconnect(true);
             return;
         }
     }
@@ -2704,6 +2811,11 @@ void setBaudWiFi(unsigned int newBaudRate) {
   delay(1000);
   WifiSerial.end();
   WifiSerial.begin(newBaudRate);
+
+  /* After setBaud changes the baud rate it loses control
+  as it doesn't see the AOK and then doesn't exit command mode
+  properly.  We send this command to get things back in order.. */
+  wifly.getPort();
 }
 
 void setBaudWiFi2(unsigned int newBaudRate) {
@@ -2779,9 +2891,9 @@ void updateEEPROMPhoneBook(int address, String host)
 
 String readEEPROMPhoneBook(int address)
 {
-    char host[38];
+    char host[ADDR_HOST_SIZE-2];
     int i=0;
-    for (; i < 38; i++)
+    for (; i < ADDR_HOST_SIZE-2; i++)
     {
         host[i] = EEPROM.read(address + i);
     }
@@ -2877,6 +2989,20 @@ int Modem_ToggleCarrier(boolean isHigh)
     return result;
 }
 
+#ifdef HAYES
+/* C64 CTS and RTS are inverted.  To allow data to flow from the C64, 
+   set CTS on the C64 to HIGH.  Normal computer would be LOW.
+   Function not currently in use.  Tried similar function for RTS
+   but caused issues with CommodoreServer at 38,400.
+   */
+void C64_SetCTS(boolean value)
+{
+    if (cts_rts_inverted)
+        value = !value;
+    digitalWriteFast(C64_CTS, value);
+}
+#endif
+
 void DisplayPhoneBook() {
     for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
     {
@@ -2926,6 +3052,7 @@ void configureWiFly() {
 
 void wake()
 {
+    setBaudWiFi2(2400);
     wifly.wake();
     //configureWiFly();
     //setBaudWiFi(WiFly_BAUD_RATE);
