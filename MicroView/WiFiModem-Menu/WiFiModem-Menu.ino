@@ -48,7 +48,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.10b1"
+#define VERSION "0.10"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;

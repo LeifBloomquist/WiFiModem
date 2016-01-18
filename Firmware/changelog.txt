@@ -18,7 +18,7 @@ Hayes:
  an AT command error with BBSs that send it in the init string.  Use ATS99
  instead.
 -Added AT*M= command to set a message that will be displayed after a remote 
- user connects for incoming connections.
+ user connects (incoming connections).
 
 
 Version 0.09 - WiFiModem-Menu-009.hex / WiFiModem-Hayes-009.hex
