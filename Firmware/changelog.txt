@@ -3,10 +3,11 @@ Version 0.11 - WiFiModem-Menu-010.hex / WiFiModem-Hayes-010.hex
 New:
 
 Hayes:
--Fix for ATS2 command register for changing escape character.  It could be 
- set, but did not change the value.
+-Fix for ATS2 command register for changing escape character.  The s register
+ could be changed, but it had no effect.
  -For ATS2 escape, a value of 128-255 now disables the escape code.
 -PETSCII response fixes.
+-OK/ERROR response fixes.
 -Added AT&S0/1/2 to set DSR option.  
  &S0 = DSR always on
  &S1 = DSR will become active when carrier has been detected and

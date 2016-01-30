@@ -1908,10 +1908,11 @@ void Modem_ProcessCommandBuffer()
         {
             updateEEPROMByte(ADDR_HOST_AUTO, phoneBookNumber);
                         
-            Modem_PrintOK();
+            //Modem_PrintOK();
         }
         else
-            Modem_PrintERROR();
+            errors++;
+            //Modem_PrintERROR();
     }    
     // Set listening TCP port
     else if (strncmp(Modem_CommandBuffer, ("AT&PORT="), 8) == 0)
@@ -1923,11 +1924,12 @@ void Modem_ProcessCommandBuffer()
         {
             if (setLocalPort(localport))
                 while(1);            
-            Modem_PrintOK();
+            //Modem_PrintOK();
             WiFlyLocalPort = localport;
         }
         else
-            Modem_PrintERROR();
+            errors++;
+            //Modem_PrintERROR();
     }    
     // List phone book entries
     else if (strstr(Modem_CommandBuffer, ("AT&PB?")) != NULL)
@@ -1943,7 +1945,7 @@ void Modem_ProcessCommandBuffer()
         C64Print(F("Autostart: "));
         C64Serial.print(EEPROM.read(ADDR_HOST_AUTO));
         C64Println();
-        Modem_PrintOK();
+        //Modem_PrintOK();
     }
     // Clear phone book
     else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR")) != NULL)
@@ -1952,7 +1954,7 @@ void Modem_ProcessCommandBuffer()
         {
             updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
         }
-        Modem_PrintOK();
+        //Modem_PrintOK();
     }
 /*    else if (strstr(Modem_CommandBuffer, ("AT&PBCLEAR")) != NULL)
     {
@@ -1979,10 +1981,11 @@ void Modem_ProcessCommandBuffer()
         if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES && Modem_CommandBuffer[6] == '=')
         {
             updateEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE), Modem_CommandBuffer + 7);
-            Modem_PrintOK();
+            //Modem_PrintOK();
         }
         else
-            Modem_PrintERROR();
+            errors++;
+            //Modem_PrintERROR();
     }
 
     else if (strncmp(Modem_CommandBuffer, ("AT"), 2) == 0)
@@ -2493,21 +2496,15 @@ void Modem_ProcessCommandBuffer()
                 errors++;
             }
         }
+    }
     
-        if (!suppressOkError && !Modem_suppressErrors) {    // TODO:  Should add error checking to calls to Modem_Dialout(), Connect() etc.
-            if (errors)   
-                Modem_PrintERROR();
-            else
-                Modem_PrintOK();
-        }
-    }
-    else
+    if (!suppressOkError)           // Don't print anything if we just dialed out etc
     {
-        if (!suppressOkError && !Modem_suppressErrors)
-            Modem_PrintERROR();
-    }
-    if (!suppressOkError && Modem_suppressErrors)
-        Modem_PrintOK();
+        if (Modem_suppressErrors || !errors)        // ats99=1 to disable errors and always print OK
+            Modem_PrintOK();
+        else if (errors)
+            Modem_PrintERROR();        
+    }   
 
     //strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);   // can't be here, already switched to uppercase
     Modem_ResetCommandBuffer();

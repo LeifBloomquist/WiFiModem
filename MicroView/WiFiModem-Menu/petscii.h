@@ -3,7 +3,7 @@ Commodore 64 - MicroView - Wi-Fi Cart
 Copyright 2015-2016 Leif Bloomquist and Alex Burger
 
 This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License version 2 
+it under the terms of the GNU General Public License version 2
 as published by the Free Software Foundation.
 
 This program is distributed in the hope that it will be useful,
@@ -16,8 +16,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
-// petscii.h
-
 #ifndef _PETSCII_h
 #define _PETSCII_h
 
@@ -25,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 char charset_p_topetcii(char c);
 char charset_p_toascii(char c);
+char charset_p_toascii_upper_only(char c);
 static char petcii_fix_dupes(char c);
 static unsigned char petcii_fix_dupes2(unsigned char c);
 

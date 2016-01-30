@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 String petscii::ToPETSCII(const char *source)
 {
     String temp = "";
+    temp.reserve(strlen(source));
 
     for (int i = 0; source[i] != 0; i++)
     {
@@ -41,6 +42,7 @@ String petscii::ToPETSCII(const char *source)
 String petscii::ToASCII(const char *source)
 {
     String temp = "";
+    temp.reserve(strlen(source));
 
     for (int i = 0; source[i] != 0; i++)
     {
@@ -88,6 +90,30 @@ char charset_p_toascii(char c)
     }
 
     return ((isprint(c) ? c : ASCII_UNMAPPED));
+}
+
+#define ASCII_UNMAPPED_NULL 0
+
+// Only shift upper A-Z c1-da
+char charset_p_toascii_upper_only(char c)
+{
+    unsigned char c2 = (unsigned char)c;
+
+    if (c2 == 0x0d) {  /* petscii "return" */
+        return '\n';
+    } else if (c2 == 0x0a) {
+        return '\r';
+    } else if (c2 <= 0x1f) {
+        /* unhandled ctrl codes */
+        return ASCII_UNMAPPED_NULL;
+    } else if (c2 == 0xa0) { /* petscii Shifted Space */
+        return ' ';
+    } else if ((c2 >= 0xc1) && (c2 <= 0xda)) {
+        /* uppercase (petscii 0xc1 -) */
+        return (char)((c2 - 0xc1) + 'A');
+    }
+    
+    return (c);
 }
 
 #define PETSCII_UNMAPPED 0x3f     /* petscii "?" */
