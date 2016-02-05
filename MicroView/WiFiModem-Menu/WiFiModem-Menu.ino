@@ -48,7 +48,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.11b3"
+#define VERSION "0.11b5"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -97,8 +97,10 @@ String lastHost = "";
 int lastPort = 23;
 
 char escapeCount = 0;
-int lastC64input = 0;
+char wifiEscapeCount = 0;
+char lastC64input = 0;
 unsigned long escapeTimer = 0;
+unsigned long wifiEscapeTimer = 0;
 boolean escapeReceived = false;
 #define ESCAPE_GUARD_TIME 1000
 
@@ -148,6 +150,8 @@ boolean Modem_suppressErrors = false;
 #define COMMAND_BUFFER_SIZE  81
 char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
 char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
+char Modem_LastCommandChar;
+boolean Modem_AT_Detected = false;
 #endif    // HAYES
 
 // Misc Values
@@ -1641,6 +1645,7 @@ void Modem_PrintResponse(const char* code, const __FlashStringHelper * msg)
 void Modem_ResetCommandBuffer()
 {
     memset(Modem_CommandBuffer, 0, COMMAND_BUFFER_SIZE);
+    Modem_AT_Detected = false;
 }
 
 
@@ -1757,27 +1762,11 @@ void Modem_ProcessCommandBuffer()
 
     //C64Println();   // Print an extra \r\n as seen on real modems.  01/17/16 - moved back to Modem_PrintResponse
     
-    // Simple PETSCII/ASCII detection
-   
+    // Simple PETSCII/ASCII detection   
     if ((((unsigned char)Modem_CommandBuffer[0] == 0xc1) && ((unsigned char)Modem_CommandBuffer[1] == 0xd4)))
         petscii_mode_guess = true;
     else
         petscii_mode_guess = false;
-
-    /*if (((Modem_CommandBuffer[0] == 'a') && (Modem_CommandBuffer[1] == 't')))
-    {
-        petscii_mode_guess = false;
-    }
-    else
-    {
-        return;  // Not an AT command, ignore silently
-    }*/
-
-    // Only write to EEPROM if changed
-    /*if (petscii_mode_guess != petscii_mode)
-    {
-        SetPETSCIIMode(petscii_mode_guess);
-    }*/
 
     // Used for a/ and also for setting SSID, PASS, KEY as they require upper/lower
     strcpy(Modem_LastCommandBuffer, Modem_CommandBuffer);
@@ -1791,111 +1780,7 @@ void Modem_ProcessCommandBuffer()
 
     Display(Modem_CommandBuffer);
     
-    // TODO: Handle concatenated command strings.  For now, process a single command.
 
-    /*if (strcmp(Modem_CommandBuffer, ("ATZ")) == 0)
-    {
-        Modem_LoadDefaults();
-        Modem_PrintOK();
-    }
-    else if (strcmp(Modem_CommandBuffer, ("ATI")) == 0)
-    {
-        ShowInfo(false);
-        Modem_PrintOK();
-    }
-    else if (strcmp(Modem_CommandBuffer, ("AT&F")) == 0)
-    {
-        Modem_LoadDefaults();
-        Modem_PrintOK();
-    }
-    else if (strcmp(Modem_CommandBuffer, ("ATA")) == 0)
-    {
-        Modem_Answer();    
-    }
-    else
-    if (strcmp(Modem_CommandBuffer, ("ATD")) == 0 || strcmp(Modem_CommandBuffer, ("ATO")) == 0)
-    {
-        if (Modem_isConnected)
-        {
-            Modem_isCommandMode = false;
-        }
-        else
-        {
-            Modem_PrintERROR();
-        }
-    }/*
-    else if (strncmp(Modem_CommandBuffer, ("ATD#"), 4) == 0)
-    {
-        // Phonebook dial
-        char numString[2];
-        numString[0] = Modem_CommandBuffer[4];
-        numString[1] = '\0';
-        char address[ADDR_HOST_SIZE];
-        
-        int phoneBookNumber = atoi(numString);
-        if (phoneBookNumber >= 1 && phoneBookNumber <= ADDR_HOST_ENTRIES)
-        {
-            strncpy(address,readEEPROMPhoneBook(ADDR_HOSTS + ((phoneBookNumber-1) * ADDR_HOST_SIZE)).c_str(),ADDR_HOST_SIZE);
-            Modem_Dialout(address);
-        }
-        else
-            Modem_PrintERROR();
-    }*/
-    /*else if (   // This needs to be revisited
-        strncmp(Modem_CommandBuffer, ("ATDT "), 5) == 0 ||
-        strncmp(Modem_CommandBuffer, ("ATDP "), 5) == 0 ||
-        strncmp(Modem_CommandBuffer, ("ATD "), 4) == 0
-        )
-    {
-        Modem_Dialout(strstr(Modem_CommandBuffer, " ") + 1);
-        Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
-    }
-    else if (strncmp(Modem_CommandBuffer, ("ATDT"), 4) == 0)
-    {
-        Modem_Dialout(strstr(Modem_CommandBuffer, "ATDT") + 4);
-        Modem_ResetCommandBuffer();  // This avoids port# string fragments on subsequent calls
-    }*/
-    /*else if ((strcmp(Modem_CommandBuffer, ("ATH0")) == 0 || strcmp(Modem_CommandBuffer, ("ATH")) == 0))
-    {
-        Modem_Disconnect(true);
-    }*/
-    /*else if (strcmp(Modem_CommandBuffer, ("AT&RAW")) == 0)
-    {
-        RawTerminalMode();
-    }  */ 
-    /*if (strncmp(Modem_CommandBuffer, ("AT&SSID="), 8) == 0)
-    {
-        if (petscii_mode)
-            wifly.setSSID(petscii::ToASCII(Modem_LastCommandBuffer + 8).c_str());
-        else 
-            wifly.setSSID(Modem_LastCommandBuffer + 8);
-        
-        wifly.leave();
-        if(wifly.join(20000))    // 20 second timeout
-            Modem_PrintOK();
-        else
-            Modem_PrintERROR();
-    }
-    else if (strncmp(Modem_CommandBuffer, ("AT&PASS="), 8) == 0)
-    {
-        if (petscii_mode)
-            wifly.setPassphrase(petscii::ToASCII(Modem_LastCommandBuffer + 8).c_str());
-        else 
-            wifly.setPassphrase(Modem_LastCommandBuffer + 8);
-        
-        Modem_PrintOK();
-    }
-    else if (strncmp(Modem_CommandBuffer, ("AT&KEY="), 7) == 0)
-    {
-        if (petscii_mode)
-            wifly.setKey(petscii::ToASCII(Modem_LastCommandBuffer + 7).c_str());
-        else 
-            wifly.setKey(Modem_LastCommandBuffer + 7);
-        
-        Modem_PrintOK();
-    }
-    // AT&PB1=bbs.jammingsignal.com:23
-    else */
     // Define auto-start phone book entry
     if (strncmp(Modem_CommandBuffer, ("AT&PBAUTO="), 10) == 0)
     {
@@ -2168,14 +2053,12 @@ void Modem_ProcessCommandBuffer()
                 switch (Modem_CommandBuffer[i++])
                 {
                 case '0':
-                    //Modem_VerboseResponses = false;
-                    //break;
+                    Modem_VerboseResponses = false;
+                    break;
 
                 case '1':
-                    //Modem_VerboseResponses = true;
-                    //break;
-
-                    Modem_VerboseResponses = Modem_CommandBuffer[i - 1] - '0x30';
+                    Modem_VerboseResponses = true;
+                    break;
 
                 default:
                     errors++;
@@ -2270,13 +2153,12 @@ void Modem_ProcessCommandBuffer()
                     switch (Modem_CommandBuffer[i++])
                     {
                     case '0':
-                        //Modem_flowControl = false;
-                        //break;
+                        Modem_flowControl = false;
+                        break;
 
                     case '1':
-                        //Modem_flowControl = true;
-                        //break;
-                        Modem_flowControl = Modem_CommandBuffer[i - 1] - '0x30';
+                        Modem_flowControl = true;
+                        break;
 
                     default:
                         errors++;
@@ -2678,7 +2560,25 @@ void Modem_ProcessData()
                   Modem_ResetCommandBuffer();
                 }
                 else {
-                    Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
+                    // TODO:  Optimize this.  Move to Modem_ProcessCommandBuffer?
+                    if (Modem_AT_Detected)
+                    {
+                        Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
+                    }
+                    else
+                    {
+                        if ((strlen(Modem_CommandBuffer) == 0) && toupper(charset_p_toascii_upper_only(inbound)) == 'A')
+                            Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
+                        else if ((strlen(Modem_CommandBuffer) == 1) && 
+                            (toupper(charset_p_toascii_upper_only(inbound)) == 'T') ||
+                            (inbound == '/')
+                            )
+                        {
+                            Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
+                            Modem_AT_Detected = true;
+                        }
+
+                    }                  
     
                     if (toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[0])) == 'A' && (Modem_CommandBuffer[1] == '/'))
                     {
@@ -2693,6 +2593,7 @@ void Modem_ProcessData()
                     }
                 }
             }
+            // It was a '\r' or '\n'
             else if (toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[0])) == 'A' && toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[1])) == 'T')
             {
                 if (Modem_flowControl)
@@ -2714,9 +2615,9 @@ void Modem_ProcessData()
             {
                 char C64input = C64Serial.read();
 
+                // +++ escape
                 if (((millis() - ESCAPE_GUARD_TIME) > escapeTimer) && Modem_S2_EscapeCharacter < 128)  // 128-255 disables escape sequence
                 {
-
                     if (C64input == Modem_S2_EscapeCharacter && lastC64input != Modem_S2_EscapeCharacter)
                     {
                         escapeCount = 1;
@@ -2747,6 +2648,9 @@ void Modem_ProcessData()
                     C64Println();
                     Modem_PrintOK();
                 }
+
+                lastC64input = C64input;
+
                 DoFlowControlC64ToModem();
                 int result = wifly.write(C64input);
             }

@@ -1,11 +1,11 @@
-Version 0.11 - WiFiModem-Menu-010.hex / WiFiModem-Hayes-010.hex
+Version 0.11 - WiFiModem-Menu-011.hex / WiFiModem-Hayes-011.hex
 ---------------------------------------------------------------
 New:
 
 Hayes:
 -Fix for ATS2 command register for changing escape character.  The s register
  could be changed, but it had no effect.
- -For ATS2 escape, a value of 128-255 now disables the escape code.
+-For ATS2 escape, a value of 128-255 now disables the escape code.
 -PETSCII response fixes.
 -OK/ERROR response fixes.
 -Added AT&S0/1/2 to set DSR option.  
