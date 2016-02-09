@@ -1,6 +1,11 @@
 Version 0.11 - WiFiModem-Menu-011.hex / WiFiModem-Hayes-011.hex
 ---------------------------------------------------------------
 New:
+-TODO menu: Improved telnet detection.  Eliminates delay when connecting to the modem
+ from remote.
+-TODO menu: File transfers over telnet should now work.  Previously only raw transfers
+ were working reliably.  C64 terminal programs use raw.
+
 
 Hayes:
 -Fix for ATS2 command register for changing escape character.  The s register
@@ -18,6 +23,8 @@ Hayes:
  Use AT*M= to set a message that will be displayed after a remote user 
  connects (incoming connections).
 -DCD now defaults to inverted.  In Novaterm, select 'Normal' for carrier.
+-AT command line can now contain non-AT command text before AT.  For example:
+ abcATE0 is now accepted.  Required for some BBSs.
 
 
 Version 0.10 - WiFiModem-Menu-010.hex / WiFiModem-Hayes-010.hex

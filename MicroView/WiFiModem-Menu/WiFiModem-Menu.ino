@@ -48,7 +48,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.11b5"
+#define VERSION "0.11b7"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -77,21 +77,36 @@ HardwareSerial& WifiSerial = Serial;
 WiFly wifly;
 
 // Telnet Stuff
-#define T_SE 240
-#define T_NOP 241
-#define T_DATAMARK 242
-#define T_BRK 243
-#define T_IP 244
-#define T_AO 245
-#define T_AYT 246
-#define T_EC 247
-#define T_GA 249
-#define T_SB 250
-#define T_WILL 251
-#define T_WONT 252
-#define T_DO 253
-#define T_DONT 254
-#define T_IAC 255
+#define NVT_SE 240
+#define NVT_NOP 241
+#define NVT_DATAMARK 242
+#define NVT_BRK 243
+#define NVT_IP 244
+#define NVT_AO 245
+#define NVT_AYT 246
+#define NVT_EC 247
+#define NVT_GA 249
+#define NVT_SB 250
+#define NVT_WILL 251
+#define NVT_WONT 252
+#define NVT_DO 253
+#define NVT_DONT 254
+#define NVT_IAC 255
+
+#define NVT_OPT_TRANSMIT_BINARY 0
+#define NVT_OPT_ECHO 1
+#define NVT_OPT_SUPPRESS_GO_AHEAD 3
+#define NVT_OPT_STATUS 5
+#define NVT_OPT_RCTE 7
+#define NVT_OPT_TIMING_MARK 6
+#define NVT_OPT_NAOCRD 10
+#define NVT_OPT_TERMINAL_TYPE 24
+#define NVT_OPT_NAWS 31
+#define NVT_OPT_TERMINAL_SPEED 32
+#define NVT_OPT_LINEMODE 34
+#define NVT_OPT_X_DISPLAY_LOCATION 35
+#define NVT_OPT_ENVIRON 36
+#define NVT_OPT_NEW_ENVIRON 39
 
 String lastHost = "";
 int lastPort = 23;
@@ -163,6 +178,9 @@ boolean Modem_DCDFollowsRemoteCarrier = false;    // &C
 byte    Modem_dataSetReady = 0;         // &S
 int WiFlyLocalPort = 0;
 boolean Modem_isCtsRtsInverted = true;           // Normally true on the C64.  False for commodoreserver 38,400.
+boolean isFirstChar = true;
+boolean isTelnet = false;
+boolean telnetBinaryMode = false;
 #ifdef HAYES
 boolean petscii_mode_guess = false;
 boolean commodoreServer38k = false;
@@ -1320,42 +1338,42 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
 
     //if (server_mode)
     //{
-    //    // T_IAC handling
+    //    // NVT_IAC handling
     //    SendTelnetParameters();    // Start off with negotiating
     //}
     
     // Wait for first character for 10 seconds
     inpint = PeekByte(wifly, 10000);
 
-    if (inpint != T_IAC)
+    if (inpint != NVT_IAC)
     {
         return;   // Not a telnet session
     }
 
-    // T_IAC handling
+    // NVT_IAC handling
     SendTelnetParameters();    // Start off with negotiating
     
     while (true)
     {
-        inpint = PeekByte(wifly, 500);       // peek at next character, timeout after 5 second
+        inpint = PeekByte(wifly, 2000);       // peek at next character, timeout after 5 second
 
-        if (inpint != T_IAC)
+        if (inpint != NVT_IAC)
         {
             return;   // Let Terminal mode handle character
         }
 
-        inpint = ReadByte(wifly);       // Eat T_IAC character
+        inpint = ReadByte(wifly);       // Eat NVT_IAC character
         verbint = ReadByte(wifly);      // receive negotiation verb character
         if (verbint == -1) continue;    // if negotiation verb character is nothing break the routine (should never happen)
 
             switch (verbint) {                           // evaluate negotiation verb character
-            case T_IAC:                                    // if negotiation verb character is 255 (restart negotiation)
+            case NVT_IAC:                                    // if negotiation verb character is 255 (restart negotiation)
                     continue;                            // break the routine
 
-            case T_WILL:                                    // if negotiation verb character is 251 (will)or
-            case T_WONT:                                    // if negotiation verb character is 252 (wont)or
-            case T_DO:                                    // if negotiation verb character is 253 (do) or
-            case T_DONT:                                    // if negotiation verb character is 254 (dont)
+            case NVT_WILL:                                    // if negotiation verb character is 251 (will)or
+            case NVT_WONT:                                    // if negotiation verb character is 252 (wont)or
+            case NVT_DO:                                    // if negotiation verb character is 253 (do) or
+            case NVT_DONT:                                    // if negotiation verb character is 254 (dont)
                     optint = ReadByte(wifly);            // receive negotiation option character
                     if (optint == -1) continue;          // if negotiation option character is nothing break the routine (should never happen)
 
@@ -1373,28 +1391,96 @@ void CheckTelnet()     //  inquiry host for telnet parameters / negotiate telnet
     }
 }
 
+// Inquire host for telnet parameters / negotiate telnet parameters with host
+// Returns true if in binary mode and modem should pass on a 255 byte from remote host to C64
+boolean CheckTelnetInline()     
+{
+    int inpint, verbint, optint;        //    telnet parameters as integers
+    
+    // NVT_IAC handling
+    
+    // First time through
+    if (isFirstChar)
+        SendTelnetParameters();    // Start off with negotiating
+
+    //inpint = ReadByte(wifly);       // Eat NVT_IAC character
+    
+    // TODO: If in BINARY mode and we receive a second IAC/255, treat it as data.  Otherwise ignore.
+    verbint = ReadByte(wifly);      // receive negotiation verb character
+    
+    if (verbint == NVT_IAC && telnetBinaryMode)
+    {
+        //DoFlowControlModemToC64();
+        //C64Serial.write(verbint);
+        return true;   // Received two NVT_IAC's so treat as single 255 data
+    }    
+    
+    switch (verbint) {                           // evaluate negotiation verb character
+    case NVT_WILL:                                    // if negotiation verb character is 251 (will)or
+    case NVT_DO:                                    // if negotiation verb character is 253 (do) or
+        optint = ReadByte(wifly);            // receive negotiation option character
+
+        switch (optint) {
+
+        case NVT_OPT_SUPPRESS_GO_AHEAD:                 // if negotiation option character is 3 (suppress - go - ahead)
+            SendTelnetDoWill(verbint, optint);
+            break;
+
+        case NVT_OPT_TRANSMIT_BINARY:                 // if negotiation option character is 0 (binary data)
+            SendTelnetDoWill(verbint, optint);
+            telnetBinaryMode = true;
+            break;
+
+        default:                                     // if negotiation option character is none of the above(all others)
+            SendTelnetDontWont(verbint, optint);
+            break;                                   //  break the routine
+        }
+        break;
+    case NVT_WONT:                                    // if negotiation verb character is 252 (wont)or
+    case NVT_DONT:                                    // if negotiation verb character is 254 (dont)
+        optint = ReadByte(wifly);            // receive negotiation option character
+
+        switch (optint) {
+
+        case NVT_OPT_TRANSMIT_BINARY:                 // if negotiation option character is 0 (binary data)
+            SendTelnetDontWont(verbint, optint);
+            telnetBinaryMode = false;
+            break;
+
+        default:                                     // if negotiation option character is none of the above(all others)
+            SendTelnetDontWont(verbint, optint);
+            break;                                   //  break the routine
+        }
+        break;
+    case NVT_IAC:                                    // Ignore second IAC/255 if we are in BINARY mode
+    default:
+        ;
+    }
+    return false;
+}
+
 void SendTelnetDoWill(int verbint, int optint)
 {
-    wifly.write(T_IAC);                           // send character 255 (start negotiation)
-    wifly.write(verbint == T_DO ? T_DO : T_WILL);    // send character 253  (do) if negotiation verb character was 253 (do) else send character 251 (will)
+    wifly.write(NVT_IAC);                           // send character 255 (start negotiation)
+    wifly.write(verbint == NVT_DO ? NVT_DO : NVT_WILL);    // send character 253  (do) if negotiation verb character was 253 (do) else send character 251 (will)
     wifly.write(optint);
 }
 
 void SendTelnetDontWont(int verbint, int optint)
 {
-    wifly.write(T_IAC);                           // send character 255   (start negotiation)
-    wifly.write(verbint == T_DO ? T_WONT : T_DONT);    // send character 252   (wont) if negotiation verb character was 253 (do) else send character254 (dont)
+    wifly.write(NVT_IAC);                           // send character 255   (start negotiation)
+    wifly.write(verbint == NVT_DO ? NVT_WONT : NVT_DONT);    // send character 252   (wont) if negotiation verb character was 253 (do) else send character254 (dont)
     wifly.write(optint);
 }
 
 void SendTelnetParameters()
 {
-    wifly.write(T_IAC);                           // send character 255 (start negotiation) 
-    wifly.write(T_DONT);                           // send character 254 (dont)
+    wifly.write(NVT_IAC);                           // send character 255 (start negotiation) 
+    wifly.write(NVT_DONT);                           // send character 254 (dont)
     wifly.write(34);                            // linemode
 
-    wifly.write(T_IAC);                           // send character 255 (start negotiation)
-    wifly.write(T_DONT);                           // send character 253 (do)
+    wifly.write(NVT_IAC);                           // send character 255 (start negotiation)
+    wifly.write(NVT_DONT);                           // send character 253 (do)
     wifly.write(1);                             // echo
 }
 
@@ -2456,8 +2542,10 @@ void Modem_Connected(boolean incoming)
         digitalWriteFast(C64_DSR, LOW);
 
         
-    if (!commodoreServer38k)
-        CheckTelnet();
+    //if (!commodoreServer38k)
+    //    CheckTelnet();
+    isFirstChar = true;
+    telnetBinaryMode = false;
 
     Modem_isConnected = true;
     Modem_isCommandMode = false;
@@ -2560,14 +2648,40 @@ void Modem_ProcessData()
                   Modem_ResetCommandBuffer();
                 }
                 else {
-                    // TODO:  Optimize this.  Move to Modem_ProcessCommandBuffer?
+                    // TODO:  Move to Modem_ProcessCommandBuffer?
                     if (Modem_AT_Detected)
                     {
                         Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
                     }
                     else
                     {
-                        if ((strlen(Modem_CommandBuffer) == 0) && toupper(charset_p_toascii_upper_only(inbound)) == 'A')
+                        switch (strlen(Modem_CommandBuffer))
+                        {
+                        case 0:
+                            switch (unsignedInbound)
+                            {
+                            case 'A':
+                            case 'a':
+                            case 0xC1:
+                                Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
+                                break;
+                            }
+                            break;
+                        case 1:
+                            switch (unsignedInbound)
+                            {
+                            case 'T':
+                            case 't':
+                            case '/':
+                            case 0xD4:
+                                Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
+                                Modem_AT_Detected = true;
+                                break;
+                            }
+                            break;
+                        }
+
+                        /*if ((strlen(Modem_CommandBuffer) == 0) && toupper(charset_p_toascii_upper_only(inbound)) == 'A')
                             Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
                         else if ((strlen(Modem_CommandBuffer) == 1) && 
                             (toupper(charset_p_toascii_upper_only(inbound)) == 'T') ||
@@ -2576,7 +2690,7 @@ void Modem_ProcessData()
                         {
                             Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
                             Modem_AT_Detected = true;
-                        }
+                        }*/
 
                     }                  
     
@@ -2652,6 +2766,11 @@ void Modem_ProcessData()
                 lastC64input = C64input;
 
                 DoFlowControlC64ToModem();
+
+                // If we are in telnet binary mode, write and extra 255 byte to escape NVT
+                if ((unsigned char)C64input == NVT_IAC && telnetBinaryMode)
+                    wifly.write(NVT_IAC);
+
                 int result = wifly.write(C64input);
             }
         }
@@ -2702,61 +2821,74 @@ void Modem_Loop()
                 //wifly.println(F("error: remote modem is in command mode."));
             }
             else
-            {
-                if (baudMismatch) {   // If host is slower than WiFly we need to buffer.  Only used for 1200 baud.
-                    int data;
-                    char buffer[10];
-                    int buffer_index = 0;
+            {                
+                int data;
 
-                    while (wifly.available() > 0)
+                // Buffer for 1200 baud
+                char buffer[10];
+                int buffer_index = 0;
+
+                while (wifly.available() > 0)
+                {
+                    int data = wifly.read();
+
+                    // If first character back from remote side is NVT_IAC, we have a telnet connection.
+                    if (isFirstChar) {
+                        if (data == NVT_IAC)
+                        {
+                            isTelnet = true;
+                            CheckTelnetInline();
+                        }
+                        else
+                        {
+                            isTelnet = false;
+                        }
+                        isFirstChar = false;
+                    }
+                    else
                     {
-                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                        if (data == NVT_IAC && isTelnet)
+                        {
+                            if (baudMismatch)
+                            {
+                                digitalWriteFast(WIFI_CTS, LOW);        // re-enable data
+                                if (CheckTelnetInline())
+                                    buffer[buffer_index++] = NVT_IAC;
+                                digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                            }
+                            else
+                            {
+                                if (CheckTelnetInline())
+                                    C64Serial.write(NVT_IAC);
+                            }
 
-                        data = wifly.read();
-                        buffer[buffer_index++] = data;
-                        if (buffer_index > 9)
-                            buffer_index = 9;
+                        }
+                        else
+                        {
+                            if (baudMismatch)
+                            {
+                                digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                                buffer[buffer_index++] = data;
+                            }
+                            else
+                            {
+                                DoFlowControlModemToC64();
+                                C64Serial.write(data);
+                            }
+                        }
                     }
-
+                }
+                if (baudMismatch)
+                {
                     // Dump the buffer to the C64 before clearing WIFI_CTS
-                    for (int i = 0; i<buffer_index; i++) {
+                    if (buffer_index > 8)
+                        buffer_index = 8;
+                    for (int i = 0; i < buffer_index; i++) {
                         C64Serial.write(buffer[i]);
-
-                        /* NOTE:  For Menu firmware, we also process C64Serial.available here.
-                                  May not be needed as 1200 baud upload and download test passed,
-                                  but when trying to use joe editor in Linux at 1200 baud, it loses
-                                  a lot of characters when typing.  Same for Menu firmware. */
                     }
-
-                    
-                    // Only used for displaying max buffer size on Microview for testing
-                    /*if (max_buffer_size_reached < buffer_index)
-                    max_buffer_size_reached = buffer_index;
-                    char message[20];
-                    sprintf_P(message, PSTR("Buf: %d"), max_buffer_size_reached);
-                    Display(message);*/
-
-                    // Show largest buffer size on Microview
-                    // 1200/2400 = 2
-                    // 4800/9600 = 3
-                    // 4800/19200 = 5
-                    // 1200/19200 = doesn't work
-                    // 4800/38400 = 12
-                    // 2400/38400 = 40 - bbs.jammingsignal.com:23 (1200 baud) worked.
-                    // 2400/38400 = 40 - cib.dyndns.com:6400 (19200 baud) worked.
-                    // 2400/38400 = 40 - Linux telnet did not work with Novaterm.  Default flow tolerance = 200.  Set to 100 and sometimes connected.
-                    // 9600/38400 = 11           
-
                     buffer_index = 0;
 
                     digitalWriteFast(WIFI_CTS, LOW);
-                }
-                else {
-                    while (wifly.available() > 0)
-                    {
-                        DoFlowControlModemToC64();
-                        C64Serial.write(wifly.read());
-                    }
                 }
             }
         }
@@ -2832,18 +2964,19 @@ long detRate(int recpin)  // function to return valid received baud rate
     long baud;
     long rate = pulseIn(recpin, LOW); // measure zero bit width from character. ASCII 'U' (01010101) provides the best results.
 
-    if (rate < 12)
-        baud = 115200;
-    else if (rate < 20)
-        baud = 57600;
-    else if (rate < 29)
+    //if (rate < 12)
+        //baud = 115200;
+    //else if (rate < 20)
+        //baud = 57600;
+    //else 
+        if (rate < 29)
         baud = 38400;
-    else if (rate < 40)
-        baud = 28800;
+    //else if (rate < 40)
+        //baud = 28800;
     else if (rate < 60)
         baud = 19200;
-    else if (rate < 80)
-        baud = 14400;
+    //else if (rate < 80)
+        //baud = 14400;
     else if (rate < 150)
         baud = 9600;
     else if (rate < 300)
