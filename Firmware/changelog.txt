@@ -1,11 +1,14 @@
 Version 0.11 - WiFiModem-Menu-011.hex / WiFiModem-Hayes-011.hex
 ---------------------------------------------------------------
 New:
--TODO menu: Improved telnet detection.  Eliminates delay when connecting to the modem
+-Improved telnet detection.  Eliminates delay when connecting to the modem
  from remote.
--TODO menu: File transfers over telnet should now work.  Previously only raw transfers
- were working reliably.  C64 terminal programs use raw.
+-File transfers over telnet now work by detecting telnet binary mode.
+ Previously only raw transfers were working reliably.
 
+Menu:
+-After accepting a call, modem waits for another call instead of going back
+ to the menu.  Pressing a key will abort while waiting for a call.
 
 Hayes:
 -Fix for ATS2 command register for changing escape character.  The s register
@@ -16,15 +19,17 @@ Hayes:
 -Added AT&S0/1/2 to set DSR option.  
  &S0 = DSR always on
  &S1 = DSR will become active when carrier has been detected and
-       inactive when carrier dropped.  Similar to DCD
+       inactive when carrier dropped.  Similar to DCD.
  &S2 = Disable DSR line.  Set this when using UP9600.
 -Fix for SSID / passphrase not being saved after being set.
--Removed 'CONNECTING...' message as it was interferring with telnet detection.
- Use AT*M= to set a message that will be displayed after a remote user 
- connects (incoming connections).
+-Replaced 'CONNECTING...' message with a custom message that can be set using
+ AT*M=.  The message will be displayed after a remote user connects (incoming 
+ connections only).
 -DCD now defaults to inverted.  In Novaterm, select 'Normal' for carrier.
 -AT command line can now contain non-AT command text before AT.  For example:
  abcATE0 is now accepted.  Required for some BBSs.
+-Fix for CommodoreServer at 38,400 baud not working if the modem was
+ previously set to 1200 baud.
 
 
 Version 0.10 - WiFiModem-Menu-010.hex / WiFiModem-Hayes-010.hex

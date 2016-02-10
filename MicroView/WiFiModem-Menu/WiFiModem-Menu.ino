@@ -20,8 +20,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
 /* TODO
- *  -set ip tcp-mode 0x10 to disable remote configuration
- *  -Confirm CheckTelnet() for inbound is working
  *  -at&f&c1 causes DCD to go high when &f is processed, then low again when &c1 is processed.
  *  
  *  
@@ -48,7 +46,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.11b7"
+#define VERSION "0.11b9"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -152,13 +150,11 @@ char autoConnectHost = 0;
 // Hayes variables
 #ifdef HAYES
 boolean Modem_isCommandMode = true;
-boolean Modem_isConnected = false;
 boolean Modem_isRinging = false;
 boolean Modem_EchoOn = true;
 boolean Modem_VerboseResponses = true;
 boolean Modem_QuietMode = false;
 boolean Modem_S0_AutoAnswer = false;
-char    Modem_S2_EscapeCharacter = '+';
 byte    Modem_X_Result = 0;
 boolean Modem_suppressErrors = false;
 
@@ -168,6 +164,8 @@ char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
 char Modem_LastCommandChar;
 boolean Modem_AT_Detected = false;
 #endif    // HAYES
+char    Modem_S2_EscapeCharacter = '+';
+boolean Modem_isConnected = false;
 
 // Misc Values
 #define TIMEDOUT  -1
@@ -979,28 +977,32 @@ void Incoming()
 
     WiFlyLocalPort = localport;  
 
-    /* Force close any connections that were made before we started listening, as 
-     * the WiFly is always listening and accepting connections if a local port 
-     * is defined.  */
-    wifly.closeForce();
-
-    C64Print(F("\r\nWaiting for connection on port "));
-    C64Serial.println(WiFlyLocalPort);
-
-    // Idle here until connected or cancelled
-    while (!wifly.isConnected())  
+    while (1)
     {
-        if (C64Serial.available() > 0)  // Key hit
-        {
-            C64Serial.read();  // Eat Character
-            C64Println(F("Cancelled"));
-            return;
-        }
-    }
+        /* Force close any connections that were made before we started listening, as
+        * the WiFly is always listening and accepting connections if a local port 
+        * is defined.  */
+        wifly.closeForce();
 
-    C64Println(F("Incoming Connection"));
-    CheckTelnet();
-    TerminalMode();
+        C64Print(F("\r\nWaiting for connection on port "));
+        C64Serial.println(WiFlyLocalPort);
+
+        // Idle here until connected or cancelled
+        while (!wifly.isConnected())
+        {
+            if (C64Serial.available() > 0)  // Key hit
+            {
+                C64Serial.read();  // Eat Character
+                C64Println(F("Cancelled"));
+                return;
+            }
+        }
+
+        C64Println(F("Incoming Connection"));
+        wifly.println(F("CONNECTING..."));
+        //CheckTelnet();
+        TerminalMode();
+    }
 }
 
 // ----------------------------------------------------------
@@ -1070,6 +1072,7 @@ void Connect(String host, int port, boolean raw)
     }
 #ifdef HAYES
     else if (host == F("CS38")) {
+        baudMismatch = false;
         host = F("www.commodoreserver.com");
         //host = F("192.168.4.145");
         port = 1541;
@@ -1161,10 +1164,10 @@ void Connect(String host, int port, boolean raw)
 #ifdef HAYES
     Modem_Connected(false);
 #else
-    if (!raw)
+    /*if (!raw)
     {
         CheckTelnet();
-    }
+    }*/
 
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
@@ -1179,60 +1182,73 @@ void TerminalMode()
     char buffer[10];
     int buffer_index = 0;
     int buffer_bytes = 0;
+    isFirstChar = true;
     //int max_buffer_size_reached = 0;
 
+    //while (wifly.available() != -1) // -1 means closed
     while (wifly.available() != -1) // -1 means closed
     {
-        if (baudMismatch) {   // If host is slower than WiFly we need to buffer.  Only used for 1200 baud.
-            while (wifly.available() > 0)
-            {
-                digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-    
-                data = wifly.read();
-                buffer[buffer_index++] = data;
-                if (buffer_index > 9)
-                  buffer_index = 9;
-            }
-    
-            // Dump the buffer to the C64 before clearing WIFI_CTS
-            for(int i=0; i<buffer_index; i++) {
-                C64Serial.write(buffer[i]);
+        while (wifly.available() > 0)
+        {
+            int data = wifly.read();
 
-                while (C64Serial.available() > 0)
+            // If first character back from remote side is NVT_IAC, we have a telnet connection.
+            if (isFirstChar) {
+                if (data == NVT_IAC)
                 {
-                    processC64Inbound();
+                    isTelnet = true;
+                    CheckTelnetInline();
+                }
+                else
+                {
+                    isTelnet = false;
+                }
+                isFirstChar = false;
+            }
+            else
+            {
+                if (data == NVT_IAC && isTelnet)
+                {
+                    if (baudMismatch)
+                    {
+                        digitalWriteFast(WIFI_CTS, LOW);        // re-enable data
+                        if (CheckTelnetInline())
+                            buffer[buffer_index++] = NVT_IAC;
+                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                    }
+                    else
+                    {
+                        if (CheckTelnetInline())
+                            C64Serial.write(NVT_IAC);
+                    }
+
+                }
+                else
+                {
+                    if (baudMismatch)
+                    {
+                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                        buffer[buffer_index++] = data;
+                    }
+                    else
+                    {
+                        DoFlowControlModemToC64();
+                        C64Serial.write(data);
+                    }
                 }
             }
-
-            /*
-            // Only used for displaying max buffer size on Microview for testing
-            if (max_buffer_size_reached < buffer_index)
-                max_buffer_size_reached = buffer_index;
-            char message[20];
-            sprintf_P(message, PSTR("Buf: %d"), max_buffer_size_reached);
-            Display(message);*/
-            
-            // Show largest buffer size on Microview
-            // 1200/2400 = 2
-            // 4800/9600 = 3
-            // 4800/19200 = 5
-            // 1200/19200 = doesn't work
-            // 4800/38400 = 12
-            // 2400/38400 = 40 - bbs.jammingsignal.com:23 (1200 baud) worked.
-            // 2400/38400 = 40 - cib.dyndns.com:6400 (19200 baud) worked.
-            // 2400/38400 = 40 - Linux telnet did not work with Novaterm.  Default flow tolerance = 200.  Set to 100 and sometimes connected.
-            // 9600/38400 = 11           
-
-            buffer_index = 0;
-              
-            digitalWriteFast(WIFI_CTS, LOW);
         }
-        else {
-            while (wifly.available() > 0)
-            {
-                DoFlowControlModemToC64();
-                C64Serial.write(wifly.read());
+        if (baudMismatch)
+        {
+            // Dump the buffer to the C64 before clearing WIFI_CTS
+            if (buffer_index > 8)
+                buffer_index = 8;
+            for (int i = 0; i < buffer_index; i++) {
+                C64Serial.write(buffer[i]);
             }
+            buffer_index = 0;
+
+            digitalWriteFast(WIFI_CTS, LOW);
         }
 
         while (C64Serial.available() > 0)
@@ -2834,16 +2850,19 @@ void Modem_Loop()
 
                     // If first character back from remote side is NVT_IAC, we have a telnet connection.
                     if (isFirstChar) {
-                        if (data == NVT_IAC)
+                        if (!commodoreServer38k)        // Not really needed, but just in case..
                         {
-                            isTelnet = true;
-                            CheckTelnetInline();
+                            if (data == NVT_IAC)
+                            {
+                                isTelnet = true;
+                                CheckTelnetInline();
+                            }
+                            else
+                            {
+                                isTelnet = false;
+                            }
                         }
-                        else
-                        {
-                            isTelnet = false;
-                        }
-                        isFirstChar = false;
+                        isFirstChar = false;                        
                     }
                     else
                     {
@@ -3049,7 +3068,11 @@ void processC64Inbound()
         escapeCount = 0;
         escapeTimer = 0;
     }
-    
+
+    // If we are in telnet binary mode, write and extra 255 byte to escape NVT
+    if ((unsigned char)C64input == NVT_IAC && telnetBinaryMode)
+        wifly.write(NVT_IAC);
+
     DoFlowControlC64ToModem();
     wifly.write(C64input);
 }
