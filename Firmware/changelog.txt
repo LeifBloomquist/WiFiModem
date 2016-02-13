@@ -1,9 +1,11 @@
 Version 0.11 - WiFiModem-Menu-011.hex / WiFiModem-Hayes-011.hex
 ---------------------------------------------------------------
+Feb 12, 2016
+
 New:
 -Improved telnet detection.  Eliminates delay when connecting to the modem
  from remote.
--File transfers over telnet now work by detecting telnet binary mode.
+-File transfers over telnet now works by detecting telnet binary mode.
  Previously only raw transfers were working reliably.
 
 Menu:
