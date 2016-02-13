@@ -1,3 +1,17 @@
+Version 0.12 - WiFiModem-Menu-012.hex / WiFiModem-Hayes-012.hex
+---------------------------------------------------------------
+xx xx, 2016
+
+New:
+
+
+Menu:
+
+
+Hayes:
+-Fix for entering S2 register on command line that also includes * settings.
+
+
 Version 0.11 - WiFiModem-Menu-011.hex / WiFiModem-Hayes-011.hex
 ---------------------------------------------------------------
 Feb 12, 2016
