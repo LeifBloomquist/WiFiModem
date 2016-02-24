@@ -1,14 +1,10 @@
 Version 0.12 - WiFiModem-Menu-012.hex / WiFiModem-Hayes-012.hex
 ---------------------------------------------------------------
-xx xx, 2016
-
-New:
-
-
-Menu:
-
+Feb 24, 2016
 
 Hayes:
+-CommodoreServer 38,400 baud improvements.
+-AT&S0/1/2 DSR fix.
 -Fix for entering S2 register on command line that also includes * settings.
 
 
