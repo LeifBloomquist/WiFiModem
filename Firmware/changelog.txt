@@ -46,6 +46,8 @@ Hayes:
 
 Version 0.10 - WiFiModem-Menu-010.hex / WiFiModem-Hayes-010.hex
 ---------------------------------------------------------------
+Jan 17, 2016
+
 New:
 
 Hayes:
@@ -69,6 +71,8 @@ Hayes:
 
 Version 0.09 - WiFiModem-Menu-009.hex / WiFiModem-Hayes-009.hex
 ---------------------------------------------------------------
+Jan 10, 2016
+
 New:
 -Fix for issue with C64 to modem flow control
 -Improved telnet detection
@@ -114,6 +118,7 @@ Menu:
 
 Version 0.08 - WiFiModem-Menu-008.hex / WiFiModem-Hayes-008.hex
 ---------------------------------------------------------------
+Dec 28, 2015
 
 New:
 -Q-Link now works at 1200 baud.  See the Commodore WiFi Modem Users Guide.pdf document for instructions.
@@ -129,6 +134,7 @@ Hayes:
 
 Version 0.07 - WiFiModem-Menu-007.hex / WiFiModem-Hayes-007.hex
 ---------------------------------------------------------------
+Dec 18, 2015
 
 New:
 -Add support for DCD always on / follow remote carrier to menu and Hayes (at&c0/1)
@@ -152,6 +158,7 @@ Hayes:
 
 Version 0.06 - WiFiModem-Menu-006.hex / WiFiModem-Hayes-006.hex
 ---------------------------------------------------------------
+Dec 4, 2015
 
 -SSID join code updated to report back on a failed join instead of a failed SSID setting
 -Changing the incoming port only reboots if it has changed. If > 2400 baud, user must reboot both the Microview and the WiFi. There are currently issues answering at > 2400 baud.
@@ -172,6 +179,7 @@ Hayes only:
 
 Version 0.05 - WiFiModem-Menu-005.hex / WiFiModem-Hayes-005.hex
 ---------------------------------------------------------------
+Dec 1, 2015
 
 -Automatic baud rate detection at boot.  When 'Baud Detection' appears on the display, you have three seconds to press a character on the keyboard to detect the speed.  It's recommended to press the letter 'u' as this should always detect the correct speed.  If you do not press a key it will use the previously detected baud rate.  Supports 1200, 2400, 9600, 19200.  Note:  There are known issues with 1200 baud support which are being investigated.  1200 baud support may be removed from future versions.
 
@@ -197,6 +205,7 @@ Hayes only:
 
 Version 0.04 - WiFiModem-Menu-004.hex / WiFiModem-Menu-004-hayes.hex
 --------------------------------------------------------------------
+Nov 16, 2015
 
 Fix for 'WiFly has crashed and will reboot...' message.
 Separated menu and Hayes versions into two separate firmare files to reduce compile size.
@@ -207,6 +216,7 @@ Ability to auto-start Hayes emulation mode or a CommodoreServer connection.  Aut
 
 Version 0.03 - WiFiModem-Menu-003.hex
 ----------------------------------------
+Nov 5, 2015
 
 Hayes Emulation mostly working (single AT command only)
 
