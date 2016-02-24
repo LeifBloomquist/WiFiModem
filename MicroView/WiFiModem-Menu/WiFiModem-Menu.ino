@@ -46,7 +46,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.12b2"
+#define VERSION "0.12b3"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -171,7 +171,7 @@ boolean Modem_isConnected = false;
 #define TIMEDOUT  -1
 boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 boolean Modem_flowControl = false;   // for &K setting.
-boolean Modem_isDcdInverted = true;
+boolean Modem_isDcdInverted = true;             // Normally true on the C64.  False for commodoreserver 38,400.
 boolean Modem_DCDFollowsRemoteCarrier = false;    // &C
 byte    Modem_dataSetReady = 0;         // &S
 int WiFlyLocalPort = 0;
@@ -1548,8 +1548,9 @@ void HayesEmulationMode()
         C64Serial.print(F("OK"));
         C64Serial.println();
     }
-
-    Modem_Loop();    
+    
+    while (true)
+        Modem_Loop();    
 }
 
 
@@ -2427,13 +2428,154 @@ void Modem_Connected(boolean incoming)
     }
 }
 
-void Modem_ProcessData()
+void Modem_Answer()
 {
-    while (C64Serial.available() >0)
+    if (!Modem_isRinging)    // If not actually ringing...
+    {
+        Modem_Disconnect(true);  // This prints "NO CARRIER"
+        return;
+    }
+
+    Modem_Connected(true);
+}
+
+// Main processing loop for the virtual modem.  Needs refactoring!
+void Modem_Loop()
+{
+    // Modem to C64 flow
+    boolean wiflyIsConnected = wifly.isConnected();
+
+    if (wiflyIsConnected && commodoreServer38k)
+    {
+        while (wifly.available() > 0)
+        {
+            DoFlowControlModemToC64();
+            C64Serial.write(wifly.read());
+        }
+    }
+    else
+    {
+        if (wiflyIsConnected) {
+            // Check for new remote connection
+            if (!Modem_isConnected && !Modem_isRinging)
+            {
+                //wifly.println(F("CONNECTING..."));
+
+                Display(F("INCOMING\nCALL"));
+                Modem_Ring();
+                return;
+            }
+
+            // If connected, handle incoming data  
+            if (Modem_isConnected)
+            {
+                // Echo an error back to remote terminal if in command mode.
+                if (Modem_isCommandMode && wifly.available() > 0)
+                {
+                    // If we print this, remote end gets flooded with this message 
+                    // if we go to command mode on the C64 and remote side sends something..
+                    //wifly.println(F("error: remote modem is in command mode."));
+                }
+                else
+                {
+                    int data;
+
+                    // Buffer for 1200 baud
+                    char buffer[10];
+                    int buffer_index = 0;
+
+                    {
+                        while (wifly.available() > 0)
+                        {
+                            int data = wifly.read();
+
+                            // If first character back from remote side is NVT_IAC, we have a telnet connection.
+                            if (isFirstChar) {
+                                if (data == NVT_IAC)
+                                {
+                                    isTelnet = true;
+                                    CheckTelnetInline();
+                                }
+                                else
+                                {
+                                    isTelnet = false;
+                                }
+                                isFirstChar = false;
+                            }
+                            else
+                            {
+                                if (data == NVT_IAC && isTelnet)
+                                {
+                                    if (baudMismatch)
+                                    {
+                                        digitalWriteFast(WIFI_CTS, LOW);        // re-enable data
+                                        if (CheckTelnetInline())
+                                            buffer[buffer_index++] = NVT_IAC;
+                                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                                    }
+                                    else
+                                    {
+                                        if (CheckTelnetInline())
+                                            C64Serial.write(NVT_IAC);
+                                    }
+
+                                }
+                                else
+                                {
+                                    if (baudMismatch)
+                                    {
+                                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                                        buffer[buffer_index++] = data;
+                                    }
+                                    else
+                                    {
+                                        DoFlowControlModemToC64();
+                                        C64Serial.write(data);
+                                    }
+                                }
+                            }
+                        }
+                        if (baudMismatch)
+                        {
+                            // Dump the buffer to the C64 before clearing WIFI_CTS
+                            if (buffer_index > 8)
+                                buffer_index = 8;
+                            for (int i = 0; i < buffer_index; i++) {
+                                C64Serial.write(buffer[i]);
+                            }
+                            buffer_index = 0;
+
+                            digitalWriteFast(WIFI_CTS, LOW);
+                        }
+                    }
+                }
+            }
+        }
+        else  // !wiflyIsConnected
+        {
+            // Check for a dropped remote connection while ringing
+            if (Modem_isRinging)
+            {
+                Modem_Disconnect(true);
+                return;
+            }
+
+            // Check for a dropped remote connection while connected
+            if (Modem_isConnected)
+            {
+                Modem_Disconnect(true);
+                return;
+            }
+        }
+    }
+
+    // C64 to Modem flow
+    //Modem_ProcessData();
+    while (C64Serial.available() > 0)
     {
         if (commodoreServer38k)
         {
-            //DoFlowControlC64ToModem();
+            DoFlowControlC64ToModem();
 
             wifly.write(C64Serial.read());
         }
@@ -2447,8 +2589,8 @@ void Modem_ProcessData()
 
                 if (Modem_flowControl)
                 {
-                    digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? LOW : HIGH));
-                    //digitalWriteFast(C64_CTS, LOW);
+                    // Tell the C64 to stop
+                    digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? LOW : HIGH));       // Stop
                 }
                 //char inbound = toupper(_serial->read());
                 char inbound = C64Serial.read();
@@ -2460,14 +2602,14 @@ void Modem_ProcessData()
                 PET AT = OK
                 */
                 /*if ((inbound >= 0xc1) && (inbound <= 0xda))
-                    petscii_char = true;
+                petscii_char = true;
                 inbound = charset_p_toascii_upper_only(inbound);
 
                 if (inbound == 0)
-                    return;*/
+                return;*/
 
 
-                    // Block non-ASCII/PETSCII characters
+                // Block non-ASCII/PETSCII characters
                 unsignedInbound = (unsigned char)inbound;
 
                 // Do not delete this.  Used for troubleshooting...
@@ -2487,8 +2629,8 @@ void Modem_ProcessData()
                 {
                     if (!Modem_flowControl)
                         delay(100 / ((BAUD_RATE >= 2400 ? BAUD_RATE : 2400) / 2400));     // Slow down command mode to prevent garbage if flow control
-                                                             // is disabled.  Doesn't work at 9600 but flow control should 
-                                                             // be on at 9600 baud anyways.  TODO:  Fix
+                                                                                            // is disabled.  Doesn't work at 9600 but flow control should 
+                                                                                            // be on at 9600 baud anyways.  TODO:  Fix
                     C64Serial.write(inbound);
                 }
 
@@ -2547,7 +2689,7 @@ void Modem_ProcessData()
                             strcpy(Modem_CommandBuffer, Modem_LastCommandBuffer);
                             if (Modem_flowControl)
                             {
-                                digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));
+                                digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));       // Go
                             }
                             Modem_ProcessCommandBuffer();
                             Modem_ResetCommandBuffer();  // To prevent A matching with A/ again
@@ -2559,7 +2701,7 @@ void Modem_ProcessData()
                 {
                     if (Modem_flowControl)
                     {
-                        digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));
+                        digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));       // Go
                     }
                     Modem_ProcessCommandBuffer();
                 }
@@ -2626,361 +2768,12 @@ void Modem_ProcessData()
             }
         }
     }
-    if (Modem_flowControl && !commodoreServer38k)
+    if (Modem_flowControl)
     {
-        digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));
-    }
-}
-
-void Modem_Answer()
-{
-    if (!Modem_isRinging)    // If not actually ringing...
-    {
-        Modem_Disconnect(true);  // This prints "NO CARRIER"
-        return;
+        digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));       // Go
     }
 
-    Modem_Connected(true);
-}
-
-// Main processing loop for the virtual modem.  Needs refactoring!
-void Modem_Loop()
-{
-    while (true)
-    {
-        // Modem to C64 flow
-        boolean wiflyIsConnected = wifly.isConnected();
-
-        if (wiflyIsConnected && commodoreServer38k)
-        {
-            while (wifly.available() > 0)
-            {
-                DoFlowControlModemToC64();
-                C64Serial.write(wifly.read());
-            }
-        }
-        else
-        {
-            if (wiflyIsConnected) {
-                // Check for new remote connection
-                if (!Modem_isConnected && !Modem_isRinging)
-                {
-                    //wifly.println(F("CONNECTING..."));
-
-                    Display(F("INCOMING\nCALL"));
-                    Modem_Ring();
-                    return;
-                }
-
-                // If connected, handle incoming data  
-                if (Modem_isConnected)
-                {
-                    // Echo an error back to remote terminal if in command mode.
-                    if (Modem_isCommandMode && wifly.available() > 0)
-                    {
-                        // If we print this, remote end gets flooded with this message 
-                        // if we go to command mode on the C64 and remote side sends something..
-                        //wifly.println(F("error: remote modem is in command mode."));
-                    }
-                    else
-                    {
-                        int data;
-
-                        // Buffer for 1200 baud
-                        char buffer[10];
-                        int buffer_index = 0;
-
-                        {
-                            while (wifly.available() > 0)
-                            {
-                                int data = wifly.read();
-
-                                // If first character back from remote side is NVT_IAC, we have a telnet connection.
-                                if (isFirstChar) {
-                                    if (data == NVT_IAC)
-                                    {
-                                        isTelnet = true;
-                                        CheckTelnetInline();
-                                    }
-                                    else
-                                    {
-                                        isTelnet = false;
-                                    }
-                                    isFirstChar = false;
-                                }
-                                else
-                                {
-                                    if (data == NVT_IAC && isTelnet)
-                                    {
-                                        if (baudMismatch)
-                                        {
-                                            digitalWriteFast(WIFI_CTS, LOW);        // re-enable data
-                                            if (CheckTelnetInline())
-                                                buffer[buffer_index++] = NVT_IAC;
-                                            digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                                        }
-                                        else
-                                        {
-                                            if (CheckTelnetInline())
-                                                C64Serial.write(NVT_IAC);
-                                        }
-
-                                    }
-                                    else
-                                    {
-                                        if (baudMismatch)
-                                        {
-                                            digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                                            buffer[buffer_index++] = data;
-                                        }
-                                        else
-                                        {
-                                            DoFlowControlModemToC64();
-                                            C64Serial.write(data);
-                                        }
-                                    }
-                                }
-                            }
-                            if (baudMismatch)
-                            {
-                                // Dump the buffer to the C64 before clearing WIFI_CTS
-                                if (buffer_index > 8)
-                                    buffer_index = 8;
-                                for (int i = 0; i < buffer_index; i++) {
-                                    C64Serial.write(buffer[i]);
-                                }
-                                buffer_index = 0;
-
-                                digitalWriteFast(WIFI_CTS, LOW);
-                            }
-                        }
-                    }
-                }
-            }
-            else  // !wiflyIsConnected
-            {
-                // Check for a dropped remote connection while ringing
-                if (Modem_isRinging)
-                {
-                    Modem_Disconnect(true);
-                    return;
-                }
-
-                // Check for a dropped remote connection while connected
-                if (Modem_isConnected)
-                {
-                    Modem_Disconnect(true);
-                    return;
-                }
-            }
-        }
-
-        // C64 to Modem flow
-        //Modem_ProcessData();
-        while (C64Serial.available() > 0)
-        {
-            if (commodoreServer38k)
-            {
-                DoFlowControlC64ToModem();
-
-                wifly.write(C64Serial.read());
-            }
-            else
-            {
-                // Command Mode -----------------------------------------------------------------------
-                if (Modem_isCommandMode)
-                {
-                    unsigned char unsignedInbound;
-                    //boolean petscii_char;
-
-                    if (Modem_flowControl)
-                    {
-                        // Tell the C64 to stop
-                        digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? LOW : HIGH));       // Stop
-                    }
-                    //char inbound = toupper(_serial->read());
-                    char inbound = C64Serial.read();
-                    // C64 PETSCII terminal programs send lower case 0x41-0x5a, upper case as 0xc1-0xda
-                    /* Real modem:
-                    ASCII at = OK
-                    ASCII AT = OK
-                    PET at = ok
-                    PET AT = OK
-                    */
-                    /*if ((inbound >= 0xc1) && (inbound <= 0xda))
-                    petscii_char = true;
-                    inbound = charset_p_toascii_upper_only(inbound);
-
-                    if (inbound == 0)
-                    return;*/
-
-
-                    // Block non-ASCII/PETSCII characters
-                    unsignedInbound = (unsigned char)inbound;
-
-                    // Do not delete this.  Used for troubleshooting...
-                    //char temp[5];
-                    //sprintf(temp, "-%d-",unsignedInbound);
-                    //C64Serial.write(temp);
-
-                    if (unsignedInbound == 0x08 || unsignedInbound == 0x0a || unsignedInbound == 0x0d || unsignedInbound == 0x14) {}  // backspace, LF, CR, C= Delete
-                    else if (unsignedInbound <= 0x1f)
-                        break;
-                    else if (unsignedInbound >= 0x80 && unsignedInbound <= 0xc0)
-                        break;
-                    else if (unsignedInbound >= 0xdb)
-                        break;
-
-                    if (Modem_EchoOn)
-                    {
-                        if (!Modem_flowControl)
-                            delay(100 / ((BAUD_RATE >= 2400 ? BAUD_RATE : 2400) / 2400));     // Slow down command mode to prevent garbage if flow control
-                                                                                              // is disabled.  Doesn't work at 9600 but flow control should 
-                                                                                              // be on at 9600 baud anyways.  TODO:  Fix
-                        C64Serial.write(inbound);
-                    }
-
-                    if (IsBackSpace(inbound))
-                    {
-                        if (strlen(Modem_CommandBuffer) > 0)
-                        {
-                            Modem_CommandBuffer[strlen(Modem_CommandBuffer) - 1] = '\0';
-                        }
-                    }
-                    //else if (inbound != '\r' && inbound != '\n' && inbound != Modem_S2_EscapeCharacter)
-                    else if (inbound != '\r' && inbound != '\n')
-                    {
-                        if (strlen(Modem_CommandBuffer) >= COMMAND_BUFFER_SIZE) {
-                            //Display (F("CMD Buf Overflow"));
-                            Modem_PrintERROR();
-                            Modem_ResetCommandBuffer();
-                        }
-                        else {
-                            // TODO:  Move to Modem_ProcessCommandBuffer?
-                            if (Modem_AT_Detected)
-                            {
-                                Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
-                            }
-                            else
-                            {
-                                switch (strlen(Modem_CommandBuffer))
-                                {
-                                case 0:
-                                    switch (unsignedInbound)
-                                    {
-                                    case 'A':
-                                    case 'a':
-                                    case 0xC1:
-                                        Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
-                                        break;
-                                    }
-                                    break;
-                                case 1:
-                                    switch (unsignedInbound)
-                                    {
-                                    case 'T':
-                                    case 't':
-                                    case '/':
-                                    case 0xD4:
-                                        Modem_CommandBuffer[strlen(Modem_CommandBuffer)] = inbound;
-                                        Modem_AT_Detected = true;
-                                        break;
-                                    }
-                                    break;
-                                }
-                            }
-
-                            if (toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[0])) == 'A' && (Modem_CommandBuffer[1] == '/'))
-                            {
-                                strcpy(Modem_CommandBuffer, Modem_LastCommandBuffer);
-                                if (Modem_flowControl)
-                                {
-                                    digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));       // Go
-                                }
-                                Modem_ProcessCommandBuffer();
-                                Modem_ResetCommandBuffer();  // To prevent A matching with A/ again
-                            }
-                        }
-                    }
-                    // It was a '\r' or '\n'
-                    else if (toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[0])) == 'A' && toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[1])) == 'T')
-                    {
-                        if (Modem_flowControl)
-                        {
-                            digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));       // Go
-                        }
-                        Modem_ProcessCommandBuffer();
-                    }
-                    else
-                    {
-                        Modem_ResetCommandBuffer();
-                    }
-                }
-
-                else    // Online ------------------------------------------
-                {
-                    if (Modem_isConnected)
-                    {
-                        char C64input = C64Serial.read();
-
-                        // +++ escape
-                        if (Modem_S2_EscapeCharacter < 128) // 128-255 disables escape sequence
-                        {
-                            if ((millis() - ESCAPE_GUARD_TIME) > escapeTimer)
-                            {
-                                if (C64input == Modem_S2_EscapeCharacter && lastC64input != Modem_S2_EscapeCharacter)
-                                {
-                                    escapeCount = 1;
-                                    lastC64input = C64input;
-                                }
-                                else if (C64input == Modem_S2_EscapeCharacter && lastC64input == Modem_S2_EscapeCharacter)
-                                {
-                                    escapeCount++;
-                                    lastC64input = C64input;
-                                }
-                                else
-                                {
-                                    escapeCount = 0;
-                                    escapeTimer = millis();   // Last time non + data was read
-                                }
-                            }
-                            else
-                            {
-                                escapeTimer = millis();   // Last time data was read
-                            }
-
-
-                            if (escapeCount == 3) {
-                                Display("Escape!");
-                                escapeReceived = true;
-                                escapeCount = 0;
-                                escapeTimer = 0;
-                                Modem_isCommandMode = true;
-                                C64Println();
-                                Modem_PrintOK();
-                            }
-                        }
-
-                        lastC64input = C64input;
-
-                        DoFlowControlC64ToModem();
-
-                        // If we are in telnet binary mode, write and extra 255 byte to escape NVT
-                        if ((unsigned char)C64input == NVT_IAC && telnetBinaryMode)
-                            wifly.write(NVT_IAC);
-
-                        int result = wifly.write(C64input);
-                    }
-                }
-            }
-        }
-        if (Modem_flowControl)
-        {
-            digitalWriteFast(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));       // Go
-        }
-
-        //digitalWrite(DCE_RTS, HIGH);
-    }
+    //digitalWrite(DCE_RTS, HIGH);
 }
 
 #endif // HAYES
@@ -3268,8 +3061,12 @@ void Modem_DSR_Set()
                 digitalWriteFast(C64_DSR, LOW);
             }
             break;
-        }
-        
+        }        
+    }
+    else
+    {
+        pinModeFast(C64_DSR, INPUT);    // Set as input to make sure it doesn't interfere with UP9600.
+                                        // Some computers have issues with 100 ohm resistor pack
     }
 }
 
