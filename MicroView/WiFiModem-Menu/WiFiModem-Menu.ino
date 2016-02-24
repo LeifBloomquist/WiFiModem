@@ -1736,7 +1736,7 @@ void Modem_Disconnect(boolean printNoCarrier)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(false));
 
     if (Modem_dataSetReady == 1)
-        digitalWriteFast(C64_DSR, HIGH);
+        digitalWriteFast(C64_DSR, LOW);
 }
 
 // Validate and handle AT sequence  (A/ was handled already)
@@ -2396,7 +2396,7 @@ void Modem_Connected(boolean incoming)
         digitalWriteFast(C64_DCD, Modem_ToggleCarrier(true));
     
     if (Modem_dataSetReady == 1)
-        digitalWriteFast(C64_DSR, LOW);
+        digitalWriteFast(C64_DSR, HIGH);
 
         
     //if (!commodoreServer38k)
