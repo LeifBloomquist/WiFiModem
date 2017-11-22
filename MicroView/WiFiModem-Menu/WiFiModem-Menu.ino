@@ -46,7 +46,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.13b1"
+#define VERSION "0.13b2"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -1062,13 +1062,13 @@ int getPort(void)
 
 void Connect(String host, int port, boolean raw)
 {
-    bool isQLink = false;
-
-    if ( (host == F("5551212")) || (host == F("5551213")) || (host == F("QLINK")) )    // Note case!
-    {
+    if (host == F("5551212")) {
+        host = F("qlink.lyonlabs.org");
+        port = 5190;
+    }
+    else if (host == F("5551213") || (host == F("QLINK"))) {
         host = F("q-link.net");
         port = 5190;
-        isQLink = true;   // Workaround Telnet detection
     }
 #ifdef HAYES
     else if (host == F("CS38")) {
@@ -1160,11 +1160,6 @@ void Connect(String host, int port, boolean raw)
 
 #ifdef HAYES
     Modem_Connected(false);
-
-    if (isQLink)
-    {
-        isFirstChar = false;  // force off 
-    }
 #else
     /*if (!raw)
     {
@@ -1199,44 +1194,39 @@ void TerminalMode()
                 if (data == NVT_IAC)
                 {
                     isTelnet = true;
-                    CheckTelnetInline();
                 }
                 else
                 {
                     isTelnet = false;
                 }
-                isFirstChar = false;
             }
-            else
-            {
-                if (data == NVT_IAC && isTelnet)
-                {
-                    if (baudMismatch)
-                    {
-                        digitalWriteFast(WIFI_CTS, LOW);        // re-enable data
-                        if (CheckTelnetInline())
-                            buffer[buffer_index++] = NVT_IAC;
-                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                    }
-                    else
-                    {
-                        if (CheckTelnetInline())
-                            C64Serial.write(NVT_IAC);
-                    }
 
+            if (data == NVT_IAC && isTelnet)
+            {
+                if (baudMismatch)
+                {
+                    digitalWriteFast(WIFI_CTS, LOW);        // re-enable data
+                    if (CheckTelnetInline())
+                        buffer[buffer_index++] = NVT_IAC;
+                    digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
                 }
                 else
                 {
-                    if (baudMismatch)
-                    {
-                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                        buffer[buffer_index++] = data;
-                    }
-                    else
-                    {
-                        DoFlowControlModemToC64();
-                        C64Serial.write(data);
-                    }
+                    if (CheckTelnetInline())
+                        C64Serial.write(NVT_IAC);
+                }
+            }
+            else
+            {
+                if (baudMismatch)
+                {
+                    digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                    buffer[buffer_index++] = data;
+                }
+                else
+                {
+                    DoFlowControlModemToC64();
+                    C64Serial.write(data);
                 }
             }
         }
@@ -1357,8 +1347,10 @@ boolean CheckTelnetInline()
     int inpint, verbint, optint;                        //    telnet parameters as integers
        
     // First time through
-    if (isFirstChar)
+    if (isFirstChar) {
         SendTelnetParameters();                         // Start off with negotiating
+        isFirstChar = false;
+    }
     
     verbint = ReadByte(wifly);                          // receive negotiation verb character
     
@@ -1868,7 +1860,7 @@ void Modem_ProcessCommandBuffer()
             case 'Z':   // ATZ
                 Modem_LoadSavedSettings();
                 if (wifly.isSleeping())
-                    wake();
+                    mWake();
                 break;
 
             case 'I':   // ATI
@@ -1917,7 +1909,7 @@ void Modem_ProcessCommandBuffer()
                 {
                 case '0':
                     if (wifly.isSleeping())
-                        wake();
+                        mWake();
                     else
                         Modem_Disconnect(false);
                     break;
@@ -1931,7 +1923,7 @@ void Modem_ProcessCommandBuffer()
                 default:
                     i--;                        // User entered ATH
                     if (wifly.isSleeping())
-                        wake();
+                        mWake();
                     else
                         Modem_Disconnect(false);
                     break;
@@ -2111,7 +2103,7 @@ void Modem_ProcessCommandBuffer()
                 case 'F':   // AT&F
                     Modem_LoadDefaults(false);
                     if (wifly.isSleeping())
-                        wake();
+                        mWake();
 
                     break;
 
@@ -2492,56 +2484,51 @@ void Modem_Loop()
                     {
                         while (wifly.available() > 0)
                         {
-                            int data = wifly.read();
+                            int data = wifly.read();                            
 
                             // If first character back from remote side is NVT_IAC, we have a telnet connection.
-                            if (isFirstChar) 
-                            {
+                            if (isFirstChar) {
                                 if (data == NVT_IAC)
                                 {
                                     isTelnet = true;
-                                    CheckTelnetInline();
                                 }
                                 else
                                 {
                                     isTelnet = false;
                                 }
-                                isFirstChar = false;
                             }
-                            else
+                                                                                  
+                            if (data == NVT_IAC && isTelnet)
                             {
-                                  if (data == NVT_IAC && isTelnet)
-                                  {
-                                      if (baudMismatch)
-                                      {
-                                        digitalWriteFast(WIFI_CTS, LOW);        // re-enable data
-                                        if (CheckTelnetInline())
-                                            buffer[buffer_index++] = NVT_IAC;
-                                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                                    }
-                                    else
-                                    {
-                                        if (CheckTelnetInline())
-                                            C64Serial.write(NVT_IAC);
-                                    }
-  
+                                if (baudMismatch)
+                                {
+                                    digitalWriteFast(WIFI_CTS, LOW);        // re-enable data
+                                    if (CheckTelnetInline())
+                                        buffer[buffer_index++] = NVT_IAC;
+                                    digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
                                 }
                                 else
                                 {
-                                    if (baudMismatch)
-                                    {
-                                        digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                                        buffer[buffer_index++] = data;
-                                    }
-                                    else
-                                    {
-                                        DoFlowControlModemToC64();
-                                        C64Serial.write(data);
-                                    }
-                               }
+                                    if (CheckTelnetInline())
+                                        C64Serial.write(NVT_IAC);
+                                }
                             }
+                            else
+                            {
+                                if (baudMismatch)
+                                {
+                                    digitalWriteFast(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
+                                    buffer[buffer_index++] = data;
+                                }
+                                else
+                                {
+                                    DoFlowControlModemToC64();
+                                    C64Serial.write(data);
+                                }
+                            }
+                            
+                           
                         }
-
                         if (baudMismatch)
                         {
                             // Dump the buffer to the C64 before clearing WIFI_CTS
@@ -3034,7 +3021,7 @@ void configureWiFly() {
 
 }
 
-void wake()
+void mWake()
 {
     setBaudWiFi2(2400);
     wifly.wake();
