@@ -18,6 +18,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* Written with assistance and code from Greg Alekel and Payton Byrd */
 
+/* Compiling:
+ *  1) Copy libraries from GitHub to your Arduino libraries folder.  The libraries in github 
+ *     have been modified reduce their compile size.
+ *  2) Compile using Arduino 1.6.8 or lower.  Compiling with 1.6.9 or higher results in a larger
+ *     binary file which will not fit in the MicroView.  The maximum compiled size is 30,720 bytes.
+ */
+
 
 /* TODO
  *  -at&f&c1 causes DCD to go high when &f is processed, then low again when &c1 is processed.
@@ -46,10 +53,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.13b2"
+#define VERSION "0.13b3"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
+unsigned char BAUD_RATE_FORCED = '0';
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -126,9 +134,9 @@ char autoConnectHost = 0;
 // EEPROM Addresses
 // Microview has 1K
 #define ADDR_PETSCII       0
-//#define ADDR_AUTOSTART     1
-#define ADDR_BAUD_LO       2
-#define ADDR_BAUD_HI       3
+#define ADDR_BAUD          1        // For manually forcing baud rate
+#define ADDR_BAUD_LO       2        // Last set baud rate from auto-detect LO
+#define ADDR_BAUD_HI       3        // Last set baud rate from auto-detect HI
 #define ADDR_MODEM_ECHO         10
 #define ADDR_MODEM_FLOW         11
 #define ADDR_MODEM_VERBOSE      12
@@ -239,46 +247,76 @@ int main(void)
         pinModeFast(C64_DSR, INPUT);    // Set as input to make sure it doesn't interfere with UP9600.
                                         // Some computers have issues with 100 ohm resistor pack
 
-    BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
+    BAUD_RATE_FORCED = (EEPROM.read(ADDR_BAUD));
 
-    if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200 && BAUD_RATE != 38400)
+    long detectedBaudRate;
+
+    switch (BAUD_RATE_FORCED) {
+    case '1':         // 1200 baud
+        BAUD_RATE = 1200;
+        Display(F("1200"));
+        break;
+
+    case '2':        // 2400 baud
         BAUD_RATE = 2400;
+        Display(F("2400"));
+        break;
 
-    //
-    // Baud rate detection
-    //
-    pinMode (C64_RxD, INPUT);
-    digitalWrite (C64_RxD, HIGH);
+    case '3':        // 4800 baud
+        BAUD_RATE = 4800;
+        Display(F("4800"));
+        break;
 
-    Display(F("Baud\nDetection"));
+    case '4':        // 9600 baud
+        BAUD_RATE = 9600;
+        Display(F("9600"));
+        break;
+        
+    default:         // Auto-detect
+        BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
 
-    long detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
-    // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
-    // by having sending circuit send "U" characters.
-    // Returns 0 if none or under 1200 baud
+        if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200 && BAUD_RATE != 38400)
+            BAUD_RATE = 2400;
 
-    //char temp[20];
-    //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
-    //Display(temp);
+        //
+        // Baud rate detection
+        //
+        pinMode(C64_RxD, INPUT);
+        digitalWrite(C64_RxD, HIGH);
 
-    if (detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 || detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400) {
-        char temp[6];
-        sprintf_P(temp, PSTR("%ld"), detectedBaudRate);
-        Display(temp);
-        delay(3000);
+        Display(F("Baud\nDetection"));
 
-        BAUD_RATE = detectedBaudRate;
+        detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
+                                                   // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
+                                                   // by having sending circuit send "U" characters.
+                                                   // Returns 0 if none or under 1200 baud
 
-        byte a = BAUD_RATE / 256;
-        byte b = BAUD_RATE % 256;
+                                                   //char temp[20];
+                                                   //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
+                                                   //Display(temp);
 
-        updateEEPROMByte(ADDR_BAUD_LO,a);
-        updateEEPROMByte(ADDR_BAUD_HI,b);
+        if (detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 || detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400) {
+            char temp[6];
+            sprintf_P(temp, PSTR("%ld"), detectedBaudRate);
+            Display(temp);
+
+            BAUD_RATE = detectedBaudRate;
+
+            byte a = BAUD_RATE / 256;
+            byte b = BAUD_RATE % 256;
+
+            updateEEPROMByte(ADDR_BAUD_LO, a);
+            updateEEPROMByte(ADDR_BAUD_HI, b);
+        }
+
+        //
+        // Baud rate detection end
+        //
+
+        break;  
+    
     }
-
-    //
-    // Baud rate detection end
-    //
+    delay(3000);
 
     C64Serial.begin(BAUD_RATE);
     WifiSerial.begin(WiFly_BAUD_RATE);
@@ -905,17 +943,19 @@ void ShowInfo(boolean powerup)
     if (!powerup) {
         char at_settings[40];
         //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"), Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses, Modem_DCDFollowsRemoteCarrier, Modem_flowControl, Modem_S0_AutoAnswer);
-        sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d\r\n S0=%d S2=%d S99=%d"),
+        sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d*B%c\r\n S0=%d S2=%d S99=%d"),
             Modem_EchoOn,Modem_QuietMode,Modem_VerboseResponses,
             Modem_DCDFollowsRemoteCarrier, Modem_X_Result,Modem_flowControl,
-            Modem_dataSetReady,Modem_S0_AutoAnswer,(int)Modem_S2_EscapeCharacter, 
+            Modem_dataSetReady, BAUD_RATE_FORCED,
+            Modem_S0_AutoAnswer,(int)Modem_S2_EscapeCharacter, 
             Modem_suppressErrors);
         C64Print(F("CURRENT INIT:"));    C64Println(at_settings);
         //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
-        sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d\r\n S0=%d S2=%d S99=%d"),
+        sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d*B%c\r\n S0=%d S2=%d S99=%d"),
             EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),
             EEPROM.read(ADDR_MODEM_DCD), EEPROM.read(ADDR_MODEM_X_RESULT),EEPROM.read(ADDR_MODEM_FLOW),
-            EEPROM.read(ADDR_MODEM_DSR), EEPROM.read(ADDR_MODEM_S0_AUTOANS),EEPROM.read(ADDR_MODEM_S2_ESCAPE),
+            EEPROM.read(ADDR_MODEM_DSR), EEPROM.read(ADDR_BAUD),
+            EEPROM.read(ADDR_MODEM_S0_AUTOANS),EEPROM.read(ADDR_MODEM_S2_ESCAPE),
             EEPROM.read(ADDR_MODEM_SUP_ERRORS));
         C64Print(F("SAVED INIT:  "));    C64Println(at_settings);
     }
@@ -1062,16 +1102,8 @@ int getPort(void)
 
 void Connect(String host, int port, boolean raw)
 {
-    if (host == F("5551212")) {
-        host = F("qlink.lyonlabs.org");
-        port = 5190;
-    }
-    else if (host == F("5551213") || (host == F("QLINK"))) {
-        host = F("q-link.net");
-        port = 5190;
-    }
 #ifdef HAYES
-    else if (host == F("CS38")) {
+    if (host == F("CS38")) {
         host = F("www.commodoreserver.com");
         port = 1541;
         commodoreServer38k = true;
@@ -2158,6 +2190,7 @@ void Modem_ProcessCommandBuffer()
                     updateEEPROMByte(ADDR_MODEM_X_RESULT, Modem_X_Result);
                     updateEEPROMByte(ADDR_MODEM_SUP_ERRORS, Modem_suppressErrors);
                     updateEEPROMByte(ADDR_MODEM_DSR, Modem_dataSetReady);
+                    updateEEPROMByte(ADDR_BAUD, BAUD_RATE_FORCED);
 
                     if (!(wifly.save()))
                         errors++;
@@ -2174,6 +2207,19 @@ void Modem_ProcessCommandBuffer()
             case '*':               // AT* Moving &ssid, &pass and &key to * costs 56 flash but saves 26 mimimum RAM.
                 switch (Modem_CommandBuffer[i++])
                 {
+                case 'B':   // AT*B     Set baud rate
+                    char newBaudRate;
+                    
+                    newBaudRate = Modem_CommandBuffer[i++];
+
+                    if (newBaudRate >= '0' && newBaudRate <= '4')
+                    {
+                        BAUD_RATE_FORCED = newBaudRate;
+                    }
+                    else
+                        errors++;
+                    break;
+
                 case 'M':   // AT*M     Message sent to remote side when answering
                     switch (Modem_CommandBuffer[i++])
                     {
@@ -2259,10 +2305,12 @@ void Modem_ProcessCommandBuffer()
 
                 case 'T':
                 case 'P':
+                    removeSpaces(&Modem_CommandBuffer[i]);
 
                     switch (Modem_CommandBuffer[i++])
                     {
-                    case '#':
+                    case ',':       // ATD,
+                    case '#':       // ATD#
                         // Phonebook dial
                         numString[0] = Modem_CommandBuffer[i];
                         numString[1] = '\0';
@@ -2289,8 +2337,10 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                case '#':
+                case ',':       // ATD,
+                case '#':       // ATD#
                     // Phonebook dial
+                    removeSpaces(&Modem_CommandBuffer[i]);
                     numString[0] = Modem_CommandBuffer[i];
                     numString[1] = '\0';
 
@@ -2308,7 +2358,6 @@ void Modem_ProcessCommandBuffer()
 
                 default:
                     i--;        // ATD
-                    removeSpaces(&Modem_CommandBuffer[i]);
                     Modem_Dialout(&Modem_CommandBuffer[i]);
                     suppressOkError = 1;
                     i = COMMAND_BUFFER_SIZE - 3;    // Make sure we don't try to process any more...
