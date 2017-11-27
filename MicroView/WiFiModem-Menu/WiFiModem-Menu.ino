@@ -262,12 +262,7 @@ int main(void)
         Display(F("2400"));
         break;
 
-    case '3':        // 4800 baud
-        BAUD_RATE = 4800;
-        Display(F("4800"));
-        break;
-
-    case '4':        // 9600 baud
+    case '3':        // 9600 baud
         BAUD_RATE = 9600;
         Display(F("9600"));
         break;
