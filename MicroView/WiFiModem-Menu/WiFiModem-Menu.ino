@@ -2207,7 +2207,7 @@ void Modem_ProcessCommandBuffer()
                     
                     newBaudRate = Modem_CommandBuffer[i++];
 
-                    if (newBaudRate >= '0' && newBaudRate <= '4')
+                    if (newBaudRate >= '0' && newBaudRate <= '3')
                     {
                         BAUD_RATE_FORCED = newBaudRate;
                     }
