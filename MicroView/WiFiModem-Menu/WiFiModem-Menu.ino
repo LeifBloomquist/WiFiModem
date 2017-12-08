@@ -53,7 +53,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "0.13b3"
+#define VERSION "0.13"
 
 unsigned int BAUD_RATE=2400;
 unsigned int WiFly_BAUD_RATE=2400;
@@ -247,7 +247,12 @@ int main(void)
         pinModeFast(C64_DSR, INPUT);    // Set as input to make sure it doesn't interfere with UP9600.
                                         // Some computers have issues with 100 ohm resistor pack
 
+#ifdef HAYES
     BAUD_RATE_FORCED = (EEPROM.read(ADDR_BAUD));
+#else
+    BAUD_RATE_FORCED = '0';
+    updateEEPROMByte(ADDR_BAUD, BAUD_RATE_FORCED);     // Change to autodetect mode if they go back to Hayes..
+#endif
 
     long detectedBaudRate;
 
@@ -2129,6 +2134,7 @@ void Modem_ProcessCommandBuffer()
 
                 case 'F':   // AT&F
                     Modem_LoadDefaults(false);
+                    BAUD_RATE_FORCED = '0';
                     if (wifly.isSleeping())
                         mWake();
 

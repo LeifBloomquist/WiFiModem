@@ -1,3 +1,15 @@
+Version 0.13 - WiFiModem-Menu-013.hex / WiFiModem-Hayes-013.hex
+---------------------------------------------------------------
+Dec 7, 2017
+
+New:
+-Fix for connecting to Quantum Link.  See documentation for new
+ instructions.
+
+Hayes:
+-New AT*Bn option to hard code baud rate to 1200, 2400 or 9600.
+
+
 Version 0.12 - WiFiModem-Menu-012.hex / WiFiModem-Hayes-012.hex
 ---------------------------------------------------------------
 Feb 24, 2016
